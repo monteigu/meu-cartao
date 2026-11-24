@@ -80,6 +80,20 @@ nav button.on{color:var(--accent)}
 .sel .grow{flex:1;min-width:0}
 .sel button{color:var(--accent);font-weight:600;font-size:14px;white-space:nowrap}
 .badge.future{background:transparent;color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
+.seg{display:flex;background:var(--bg);border-radius:10px;padding:2px}
+.seg button{font-size:12px;padding:5px 10px;border-radius:8px;color:var(--muted)}
+.seg button.on{background:var(--key-press);color:var(--text);font-weight:600}
+.crow{padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.crow:last-child{border-bottom:0}
+.crow .top{display:flex;align-items:baseline;gap:8px}
+.crow .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crow .val{font-weight:600;font-variant-numeric:tabular-nums}
+.crow .bar{height:6px;margin-top:5px}.crow .bar i{background:var(--c-closed)}
+.crow .meta{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:3px}
+.up{color:var(--warn)}.down{color:var(--ok)}
+.stores{margin-top:6px;font-size:13px}
+.stores div{display:flex;justify-content:space-between;gap:8px;padding:3px 0;color:var(--muted)}
+.stores span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dates{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px;text-align:center}
 .dates div{background:var(--bg);border-radius:10px;padding:6px}
 .dates b{display:block;font-size:15px}
@@ -186,6 +200,12 @@ dialog h3{margin:0 0 12px}
       <div id="chart"></div>
       <div id="chSel" class="sel"></div>
     </div>
+    <div class="card">
+      <div class="row spread"><b>Gastos por categoria</b>
+        <div class="seg" id="catMode"><button data-m="inv" class="on">Fatura</button><button data-m="avg">Média</button></div></div>
+      <div class="small muted" id="catSub" style="margin:4px 0 6px"></div>
+      <div id="catBars"></div>
+    </div>
     <h2>Todas as faturas</h2>
     <div class="card" id="sumList"></div>
   </section>
@@ -232,7 +252,7 @@ dialog h3{margin:0 0 12px}
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <button class="btn danger" id="wipeBtn">🧹 Limpar lançamentos…</button>
     </div>
-    <p class="small muted" style="text-align:center">Meu Cartão · v7</p>
+    <p class="small muted" style="text-align:center">Meu Cartão · v8</p>
   </section>
 </main>
 
@@ -1164,6 +1184,7 @@ function renderSum() {
   const bars = all.filter(x => x.k >= cur - 8 && x.k <= cur + 3 && (x.k <= cur || x.total > 0));
   if (sumSel === null || !bars.some(b => b.k === sumSel)) sumSel = cur;
   drawChart(bars, g);
+  renderCatSum(all);
   // lista (mais recente primeiro)
   const list = all.filter(x => x.total > 0 || x.k === cur).reverse();
   $("#sumList").innerHTML = list.map(x => `<div class="tx" data-k="${x.k}" style="cursor:pointer">
@@ -1205,6 +1226,61 @@ function drawChart(bars, goal) {
     <div class="small muted">${fmt(b.total)}${goal ? ` · ${Math.round(b.total / goal * 100)}% da meta` : ""} · ${payInfo(b.k, b.total) || "vence " + br(dueDate(b.k))}</div></div>
     <button data-go="${b.k}">Ver fatura ›</button>` : "";
 }
+/* gastos por categoria: fatura selecionada no gráfico (com comparação à média das 3 anteriores) ou média das últimas 6 fechadas */
+let catMode = "inv", catOpen = null;
+function catTotals(k) {
+  const out = {};
+  for (const e of entries(k)) { const id = catById(e.t.cat).id; out[id] = (out[id] || 0) + e.amt; }
+  return out;
+}
+function renderCatSum(all) {
+  const withData = all.filter(x => entries(x.k).length);
+  const avgOf = ks => { const acc = {}; ks.forEach(k => { for (const [id, v] of Object.entries(catTotals(k))) acc[id] = (acc[id] || 0) + v; }); for (const id in acc) acc[id] = Math.round(acc[id] / ks.length); return acc; };
+  let vals, ref = null, sub, ks;
+  if (catMode === "inv") {
+    ks = [sumSel];
+    vals = catTotals(sumSel);
+    const prev = withData.filter(x => x.k < sumSel).slice(-3).map(x => x.k);
+    // fatura aberta: compara com a média proporcional ao ponto do ciclo (ex.: 40% do mês passado)
+    let frac = 1;
+    if (invStatus(sumSel) === "Aberta") {
+      const o = openDate(sumSel), len = daysBetween(o, openDate(sumSel + 1));
+      frac = Math.min(1, Math.max(.05, (daysBetween(o, today()) + 1) / len));
+    }
+    if (prev.length) { ref = avgOf(prev); for (const id in ref) ref[id] = Math.round(ref[id] * frac); }
+    sub = `${invLabel(sumSel)}${prev.length ? ` · comparado à média de ${prev.length === 1 ? "1 fatura anterior" : `${prev.length} faturas anteriores`}${frac < 1 ? ` no mesmo ponto do ciclo (${Math.round(frac * 100)}% do mês)` : ""}` : ""}. Toque numa barra do gráfico para trocar de fatura.`;
+  } else {
+    ks = withData.filter(x => x.status === "Fechada").slice(-6).map(x => x.k);
+    vals = ks.length ? avgOf(ks) : {};
+    sub = ks.length ? `Média por fatura de ${ks.map(k => shortMonth(k)).join(", ")}` : "Ainda não há faturas fechadas com lançamentos no app";
+  }
+  $("#catSub").textContent = sub;
+  const rows = Object.entries(vals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const tot = rows.reduce((s, [, v]) => s + v, 0), max = rows.length ? rows[0][1] : 1;
+  if (!rows.length) { $("#catBars").innerHTML = `<div class="empty">Sem gastos lançados no app${catMode === "inv" ? " nesta fatura" : ""}</div>`; return; }
+  $("#catBars").innerHTML = rows.map(([id, v]) => {
+    const c = catById(id), r = ref ? ref[id] || 0 : null;
+    let delta = "";
+    if (r != null) {
+      if (!r) delta = `<span class="up">novo</span>`;
+      else { const d = Math.round((v - r) / r * 100); delta = Math.abs(d) < 5 ? `<span>≈ média</span>` : d > 0 ? `<span class="up">▲ ${d}% vs média</span>` : `<span class="down">▼ ${-d}% vs média</span>`; }
+    }
+    const goal = c.goal && catMode === "inv" ? ` · meta ${fmt(c.goal)}` : "";
+    let stores = "";
+    if (catOpen === id) {
+      const by = {};
+      for (const k of ks) for (const e of entries(k)) if (catById(e.t.cat).id === id) { const n = e.t.desc || "(sem descrição)"; by[n] = (by[n] || 0) + e.amt; }
+      const top = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 6);
+      stores = `<div class="stores">${top.map(([n, x]) => `<div><span>${esc(n)}</span><span>${fmt(catMode === "avg" ? Math.round(x / ks.length) : x)}</span></div>`).join("")}</div>`;
+    }
+    return `<div class="crow" data-c="${esc(id)}">
+      <div class="top"><span>${esc(c.emoji)}</span><span class="nm">${esc(c.name)}</span><span class="val">${fmt(v)}</span></div>
+      <div class="bar"><i style="width:${(v / max * 100).toFixed(1)}%"></i></div>
+      <div class="meta"><span>${Math.round(v / tot * 100)}% do total${goal}</span>${delta}</div>${stores}</div>`;
+  }).join("") + `<div class="small muted" style="margin-top:8px">Toque numa categoria para ver as lojas.</div>`;
+}
+$("#catMode").onclick = e => { const m = e.target.dataset.m; if (!m) return; catMode = m; catOpen = null; document.querySelectorAll("#catMode button").forEach(b => b.classList.toggle("on", b.dataset.m === m)); renderSum(); };
+$("#catBars").onclick = e => { const id = e.target.closest(".crow")?.dataset.c; if (!id) return; catOpen = catOpen === id ? null : id; renderSum(); };
 $("#chart").onclick = e => { const k = e.target.dataset && e.target.dataset.k; if (k) { sumSel = +k; renderSum(); } };
 $("#chSel").onclick = e => { const k = e.target.dataset.go; if (k) { viewK = +k; show("inv"); } };
 $("#sumList").onclick = e => { const k = e.target.closest(".tx")?.dataset.k; if (k) { viewK = +k; show("inv"); } };
