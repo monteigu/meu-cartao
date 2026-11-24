@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Meu Cartão</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Cartão">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#111214">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.json">
+<style>
+/* sempre modo noturno */
+:root{
+  color-scheme:dark;
+  --bg:#111214;--card:#1c1d21;--text:#f2f3f5;--muted:#9097a3;--line:#2c2e34;
+  --accent:#8b85ff;--accent-strong:#5b54e8;--accent-soft:#26244a;--ok:#22c55e;--warn:#f59e0b;--bad:#f87171;
+  --key:#26272c;--key-press:#34363c;--toast:#2f3138;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;-webkit-user-select:none;user-select:none}
+input,select,textarea{-webkit-user-select:text;user-select:text;font:inherit;color:inherit}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+main{padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 84px);max-width:560px;margin:0 auto}
+.view{display:none}.view.on{display:block}
+h1{font-size:22px;margin:4px 0 12px}
+h2{font-size:15px;margin:20px 0 8px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:12px}
+.muted{color:var(--muted)}.small{font-size:13px}
+.row{display:flex;align-items:center;gap:10px}
+.spread{justify-content:space-between}
+.bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:6px}
+.bar>i{display:block;height:100%;border-radius:99px;background:var(--ok);transition:width .3s}
+.bar.warn>i{background:var(--warn)}.bar.bad>i{background:var(--bad)}
+/* nav */
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:5}
+nav button{flex:1;padding:8px 0 6px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:var(--muted)}
+nav button span{font-size:20px;line-height:1}
+nav button.on{color:var(--accent)}
+/* quick add */
+.amount{text-align:center;font-size:44px;font-weight:700;letter-spacing:-.02em;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+.amount.zero{color:var(--muted)}
+.mini{text-align:center;font-size:13px;color:var(--muted);min-height:18px}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.keypad button{background:var(--key);border-radius:12px;height:50px;font-size:22px;font-weight:500}
+.keypad button:active{background:var(--key-press)}
+.cats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.cat{background:var(--card);border-radius:12px;padding:8px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;min-height:64px}
+.cat b{font-size:24px;font-weight:400;line-height:1.1}
+.cat:active{background:var(--accent-soft)}
+.more{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.chip{background:var(--card);border-radius:99px;padding:7px 12px;font-size:13px;color:var(--muted)}
+.chip.set{color:var(--accent);background:var(--accent-soft)}
+.hint{text-align:center;font-size:12px;color:var(--muted);margin-top:10px}
+/* invoice */
+.inv-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.inv-head button{font-size:26px;padding:4px 14px;color:var(--accent)}
+.big{font-size:34px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.badge{font-size:12px;padding:3px 8px;border-radius:99px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+.badge.closed{background:var(--line);color:var(--muted)}
+.dates{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px;text-align:center}
+.dates div{background:var(--bg);border-radius:10px;padding:6px}
+.dates b{display:block;font-size:15px}
+.tx{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.tx:last-child{border-bottom:0}
+.tx .e{font-size:22px;width:30px;text-align:center}
+.tx .d{flex:1;min-width:0}
+.tx .d div:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx .v{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.catline{margin:10px 0}
+.empty{text-align:center;color:var(--muted);padding:20px 0}
+/* forms */
+label.f{display:block;margin-bottom:12px}
+label.f span{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+.in{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:16px}
+.btn{display:block;width:100%;padding:12px;border-radius:12px;background:var(--accent-strong);color:#fff;font-weight:600;text-align:center;margin-top:8px}
+.btn.sec{background:var(--bg);color:var(--text);border:1px solid var(--line)}
+.btn.danger{background:transparent;color:var(--bad);border:1px solid var(--bad)}
+.goalrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.goalrow:last-child{border-bottom:0}
+.goalrow .n{flex:1;min-width:0}
+.goalrow input{width:110px;text-align:right}
+.x{color:var(--bad);font-size:18px;padding:4px 8px}
+.banner{background:var(--accent-soft);color:var(--accent);border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:12px}
+/* modal */
+dialog{border:0;border-radius:18px;background:var(--card);color:var(--text);width:min(92vw,440px);padding:18px}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog h3{margin:0 0 12px}
+/* toast */
+#toast{position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:calc(env(safe-area-inset-bottom) + 76px);background:var(--toast);color:var(--text);box-shadow:0 6px 24px rgba(0,0,0,.5);padding:10px 14px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;display:flex;gap:12px;align-items:center;max-width:92vw;z-index:20}
+#toast.on{opacity:1;transform:translateX(-50%);pointer-events:auto}
+#toast button{color:var(--accent);font-weight:700}
+.shake{animation:sh .35s}
+@keyframes sh{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+</style>
+</head>
+<body>
+<main>
+  <!-- LANÇAR -->
+  <section id="v-add" class="view on">
+    <div id="setupBanner" class="banner" hidden>👋 Primeiro, configure o dia de fechamento do seu cartão em <b>Ajustes</b>.</div>
+    <div id="amt" class="amount zero">R$ 0,00</div>
+    <div id="mini" class="mini"></div>
+    <div class="more">
+      <button class="chip set" id="chScan">📷 Ler compra</button>
+      <button class="chip" id="chDesc">✏️ Descrição</button>
+      <button class="chip" id="chParc">💳 À vista</button>
+      <button class="chip" id="chDate">📅 Hoje</button>
+    </div>
+    <div class="keypad" id="keypad"></div>
+    <div class="cats" id="cats"></div>
+    <div class="hint">Digite o valor e toque na categoria para salvar.</div>
+    <input type="file" id="photoIn" accept="image/*" hidden>
+  </section>
+
+  <!-- FATURA -->
+  <section id="v-inv" class="view">
+    <div class="inv-head">
+      <button id="prevInv" aria-label="Fatura anterior">‹</button>
+      <div style="text-align:center"><div id="invTitle" style="font-weight:700"></div><span id="invBadge" class="badge"></span></div>
+      <button id="nextInv" aria-label="Próxima fatura">›</button>
+    </div>
+    <div class="card">
+      <div class="muted small">Total da fatura</div>
+      <div class="big" id="invTotal"></div>
+      <div id="invGoal" class="small muted"></div>
+      <div class="bar" id="invBar"><i></i></div>
+      <div class="dates">
+        <div><span class="small muted">Abre</span><b id="dOpen"></b></div>
+        <div><span class="small muted">Fecha</span><b id="dClose"></b></div>
+        <div><span class="small muted">Vence</span><b id="dDue"></b></div>
+      </div>
+      <div class="small muted" id="invCountdown" style="text-align:center;margin-top:8px"></div>
+      <button class="btn sec" id="adjClose" style="font-size:14px;padding:8px">Ajustar datas da fatura</button>
+    </div>
+    <h2>Por categoria</h2>
+    <div class="card" id="invCats"></div>
+    <h2>Lançamentos</h2>
+    <div class="card" id="invList"></div>
+  </section>
+
+  <!-- METAS -->
+  <section id="v-goals" class="view">
+    <h1>Metas mensais</h1>
+    <p class="small muted" style="margin-top:-6px">As metas valem para cada fatura (do fechamento anterior ao próximo). Deixe em branco para não ter meta.</p>
+    <div class="card">
+      <label class="f"><span>Meta total por fatura (R$)</span><input class="in" id="goalTotal" inputmode="decimal" placeholder="Ex.: 3000"></label>
+      <div id="goalTotalBar"></div>
+    </div>
+    <h2>Por categoria</h2>
+    <div class="card" id="goalCats"></div>
+  </section>
+
+  <!-- AJUSTES -->
+  <section id="v-set" class="view">
+    <h1>Ajustes</h1>
+    <div class="card">
+      <label class="f"><span>Nome do cartão</span><input class="in" id="sName" placeholder="Ex.: Nubank"></label>
+      <div class="row">
+        <label class="f" style="flex:1"><span>Dia que abre</span><input class="in" id="sOpen" type="number" inputmode="numeric" min="1" max="31"></label>
+        <label class="f" style="flex:1"><span>Dia que fecha</span><input class="in" id="sClose" type="number" inputmode="numeric" min="1" max="31"></label>
+        <label class="f" style="flex:1"><span>Vencimento</span><input class="in" id="sDue" type="number" inputmode="numeric" min="1" max="31"></label>
+      </div>
+      <div class="small muted">Na maioria dos bancos a fatura abre no mesmo dia em que a anterior fecha (compras no dia do fechamento já vão para a próxima). Alterações valem da fatura atual em diante; as anteriores não mudam. Também dá para ajustar as datas na tela da Fatura.</div>
+      <button class="btn" id="saveSet">Salvar</button>
+    </div>
+    <h2>Categorias</h2>
+    <div class="card">
+      <div id="catList"></div>
+      <div class="row" style="margin-top:10px">
+        <input class="in" id="newEmoji" placeholder="🙂" style="width:60px;text-align:center">
+        <input class="in" id="newCat" placeholder="Nova categoria">
+      </div>
+      <button class="btn sec" id="addCat">Adicionar categoria</button>
+    </div>
+    <h2>Backup</h2>
+    <div class="card">
+      <div class="small muted">Os dados ficam somente neste iPhone. Faça um backup de vez em quando (salve no app Arquivos/iCloud).</div>
+      <button class="btn sec" id="exportBtn">Exportar backup</button>
+      <button class="btn sec" id="importBtn">Importar backup</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+      <button class="btn danger" id="wipeBtn">Apagar todos os dados</button>
+    </div>
+    <p class="small muted" style="text-align:center">Meu Cartão · v4</p>
+  </section>
+</main>
+
+<nav>
+  <button data-v="add" class="on"><span>➕</span>Lançar</button>
+  <button data-v="inv"><span>🧾</span>Fatura</button>
+  <button data-v="goals"><span>🎯</span>Metas</button>
+  <button data-v="set"><span>⚙️</span>Ajustes</button>
+</nav>
+
+<dialog id="dlg"><form method="dialog" id="dlgForm"></form></dialog>
+<div id="toast"><span id="toastMsg"></span><button id="toastBtn" hidden>Desfazer</button></div>
+
+<script>
+"use strict";
+const KEY = "meucartao.v1";
+const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const DEF_CATS = [["mercado","Mercado","🛒"],["restaurante","Restaurantes","🍽️"],["delivery","Delivery","🛵"],["transporte","Transporte","🚗"],["combustivel","Combustível","⛽"],["saude","Saúde","💊"],["casa","Casa","🏠"],["lazer","Lazer","🎉"],["compras","Compras","🛍️"],["assinaturas","Assinaturas","📺"],["viagem","Viagem","✈️"],["outros","Outros","📦"]];
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+/* ---------- estado ---------- */
+function defaults() {
+  return {
+    // schedule: datas do cartão; cada item vale a partir da fatura "from" (as anteriores não mudam)
+    settings: { cardName: "Meu cartão", goal: 0, configured: false, schedule: [{ from: 0, openDay: 5, closeDay: 5, dueDay: 12 }] },
+    categories: DEF_CATS.map(([id, name, emoji]) => ({ id, name, emoji, goal: 0 })),
+    tx: []
+  };
+}
+let S;
+try { S = JSON.parse(localStorage.getItem(KEY)) || defaults(); } catch (e) { S = defaults(); }
+function migrate(d) {
+  const s = d.settings;
+  if (!Array.isArray(s.schedule) || !s.schedule.length) {
+    const c = s.closeDay || 5;
+    s.schedule = [{ from: 0, openDay: c, closeDay: c, dueDay: s.dueDay || 12 }];
+  }
+  delete s.closeDay; delete s.dueDay; delete s.overrides;
+  s.schedule.sort((a, b) => a.from - b.from);
+  return d;
+}
+migrate(S);
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch (e) { alert("Não foi possível salvar os dados neste aparelho."); }
+}
+
+/* ---------- datas e faturas ---------- */
+const pad = n => String(n).padStart(2, "0");
+const ymd = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+const dim = (y, m) => new Date(y, m + 1, 0).getDate();
+const fromIdx = k => [Math.floor(k / 12), ((k % 12) + 12) % 12];
+function today() { const d = new Date(); return ymd(d.getFullYear(), d.getMonth(), d.getDate()); }
+const br = s => s.slice(8, 10) + "/" + s.slice(5, 7);
+const monthIdx = date => (+date.slice(0, 4)) * 12 + (+date.slice(5, 7) - 1);
+// k = ano*12 + mês em que a fatura fecha
+function cfg(k) { let c = S.settings.schedule[0]; for (const s of S.settings.schedule) if (s.from <= k) c = s; return c; }
+function dayIn(k, day) { const [y, m] = fromIdx(k); return ymd(y, m, Math.min(day, dim(y, m))); }
+function closeDate(k) { return dayIn(k, cfg(k).closeDay); }
+function openDate(k) { const c = cfg(k); return dayIn(c.openDay >= c.closeDay ? k - 1 : k, c.openDay); }
+function dueDate(k) { const c = cfg(k); return dayIn(c.dueDay > c.closeDay ? k : k + 1, c.dueDay); }
+// fatura a que uma compra pertence: a última fatura cuja abertura é no dia da compra ou antes
+function invoiceOf(date) {
+  const k0 = monthIdx(date);
+  for (let k = k0 + 2; k >= k0 - 1; k--) if (date >= openDate(k)) return k;
+  return k0 - 1;
+}
+// grava novas datas valendo da fatura "from" em diante
+function setSchedule(from, openDay, closeDay, dueDay) {
+  S.settings.schedule = S.settings.schedule.filter(s => s.from < from)
+    .concat({ from: S.settings.schedule.some(s => s.from < from) ? from : 0, openDay, closeDay, dueDay });
+}
+function invLabel(k) { const d = dueDate(k); return MONTHS[+d.slice(5, 7) - 1] + "/" + d.slice(0, 4); }
+function daysBetween(a, b) { return Math.round((new Date(b + "T12:00") - new Date(a + "T12:00")) / 864e5); }
+function addDays(s, n) { const d = new Date(s + "T12:00"); d.setDate(d.getDate() + n); return ymd(d.getFullYear(), d.getMonth(), d.getDate()); }
+
+// lançamentos (com parcelas) que caem na fatura k
+function entries(k) {
+  const out = [];
+  for (const t of S.tx) {
+    const n = t.parcels || 1, i = k - invoiceOf(t.date);
+    if (i >= 0 && i < n) {
+      const base = Math.floor(t.amount / n);
+      out.push({ t, i, n, amt: base + (i === 0 ? t.amount - base * n : 0) });
+    }
+  }
+  return out.sort((a, b) => b.t.date.localeCompare(a.t.date) || b.t.id.localeCompare(a.t.id));
+}
+const sum = es => es.reduce((s, e) => s + e.amt, 0);
+const catById = id => S.categories.find(c => c.id === id) || S.categories.find(c => c.id === "outros") || { name: "?", emoji: "❔", id };
+
+/* ---------- formatos ---------- */
+const fmt = c => (c / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+function parseMoney(v) {
+  if (v == null) return 0;
+  v = String(v).trim().replace(/[R$\s]/g, "");
+  if (!v) return 0;
+  if (v.includes(",")) v = v.replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(v);
+  return isFinite(n) && n > 0 ? Math.round(n * 100) : 0;
+}
+const moneyInput = c => c ? (c / 100).toFixed(2).replace(".", ",") : "";
+function barHtml(val, goal) {
+  if (!goal) return "";
+  const p = val / goal, cls = p >= 1 ? "bad" : p >= .8 ? "warn" : "";
+  return `<div class="bar ${cls}"><i style="width:${Math.min(100, p * 100).toFixed(1)}%"></i></div>`;
+}
+
+/* ---------- toast ---------- */
+let toastTimer, toastUndo;
+function toast(msg, undo) {
+  $("#toastMsg").textContent = msg;
+  toastUndo = undo; $("#toastBtn").hidden = !undo;
+  $("#toast").classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $("#toast").classList.remove("on"), undo ? 5000 : 2500);
+}
+$("#toastBtn").onclick = () => { if (toastUndo) toastUndo(); $("#toast").classList.remove("on"); };
+
+/* ---------- navegação ---------- */
+let curView = "add";
+function show(v) {
+  curView = v;
+  document.querySelectorAll(".view").forEach(el => el.classList.toggle("on", el.id === "v-" + v));
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+  render(); window.scrollTo(0, 0);
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => show(b.dataset.v));
+
+/* ---------- LANÇAR ---------- */
+const qa = { cents: 0, desc: "", parcels: 1, date: null };
+function renderAdd() {
+  $("#setupBanner").hidden = S.settings.configured;
+  const a = $("#amt"); a.textContent = fmt(qa.cents); a.classList.toggle("zero", !qa.cents);
+  const k = invoiceOf(today()), tot = sum(entries(k)), g = S.settings.goal;
+  $("#mini").textContent = `Fatura atual: ${fmt(tot)}` + (g ? ` de ${fmt(g)} (${Math.round(tot / g * 100)}%)` : "") + ` · fecha ${br(closeDate(k))}`;
+  const cd = $("#chDesc"), cp = $("#chParc"), ct = $("#chDate");
+  cd.textContent = qa.desc ? "✏️ " + qa.desc : "✏️ Descrição"; cd.classList.toggle("set", !!qa.desc);
+  cp.textContent = qa.parcels > 1 ? `💳 ${qa.parcels}x de ${fmt(Math.floor(qa.cents / qa.parcels))}` : "💳 À vista"; cp.classList.toggle("set", qa.parcels > 1);
+  ct.textContent = qa.date ? "📅 " + br(qa.date) : "📅 Hoje"; ct.classList.toggle("set", !!qa.date);
+  $("#cats").innerHTML = S.categories.map(c => `<button class="cat" data-c="${esc(c.id)}"><b>${esc(c.emoji)}</b>${esc(c.name)}</button>`).join("");
+}
+(function buildKeypad() {
+  const keys = ["1","2","3","4","5","6","7","8","9","00","0","⌫"];
+  $("#keypad").innerHTML = keys.map(k => `<button data-k="${k}">${k}</button>`).join("");
+  $("#keypad").onclick = e => {
+    const k = e.target.closest("button")?.dataset.k; if (!k) return;
+    if (k === "⌫") qa.cents = Math.floor(qa.cents / 10);
+    else { const n = qa.cents * (k === "00" ? 100 : 10) + (k === "00" ? 0 : +k); if (n <= 9999999999) qa.cents = n; }
+    renderAdd();
+  };
+})();
+// lembra a categoria usada para cada loja, para sugerir da próxima vez
+function learn(t) { if (t.desc) { S.learn = S.learn || {}; S.learn[norm(t.desc)] = t.cat; } }
+function addTx(t, silentUndo) {
+  S.tx.push(t); learn(t); save();
+  const c = catById(t.cat), k = invoiceOf(t.date);
+  toast(`${fmt(t.amount)} em ${c.name}${t.parcels > 1 ? ` (${t.parcels}x)` : ""} · fatura ${invLabel(k)}`, () => {
+    S.tx = S.tx.filter(x => x.id !== t.id); save(); render(); toast("Lançamento desfeito");
+  });
+  const g = S.settings.goal, tot = sum(entries(invoiceOf(today())));
+  const cg = c.goal, ctot = sum(entries(invoiceOf(today())).filter(e => catById(e.t.cat).id === c.id));
+  if (cg && ctot > cg) setTimeout(() => toast(`⚠️ Meta de ${c.name} estourada: ${fmt(ctot)} de ${fmt(cg)}`), 5200);
+  else if (g && tot > g) setTimeout(() => toast(`⚠️ Meta total estourada: ${fmt(tot)} de ${fmt(g)}`), 5200);
+}
+$("#cats").onclick = e => {
+  const id = e.target.closest(".cat")?.dataset.c; if (!id) return;
+  if (!qa.cents) { const a = $("#amt"); a.classList.remove("shake"); void a.offsetWidth; a.classList.add("shake"); toast("Digite o valor primeiro"); return; }
+  addTx({ id: uid(), date: qa.date || today(), amount: qa.cents, cat: id, desc: qa.desc, parcels: qa.parcels });
+  Object.assign(qa, { cents: 0, desc: "", parcels: 1, date: null });
+  if (navigator.vibrate) navigator.vibrate(20);
+  renderAdd();
+};
+
+/* ---------- diálogos ---------- */
+function dialog(html, onOk) {
+  const f = $("#dlgForm"), d = $("#dlg");
+  f.innerHTML = html;
+  f._extra = null;
+  f.onsubmit = ev => {
+    const btn = ev.submitter?.value;
+    if (btn === "ok" && onOk && onOk(f) === false) { ev.preventDefault(); return; }
+    if (btn && btn !== "ok" && btn !== "cancel" && f._extra) f._extra(btn);
+  };
+  d.showModal();
+  return f;
+}
+const dlgBtns = (ok = "Salvar") => `<button class="btn" value="ok">${ok}</button><button class="btn sec" value="cancel" formnovalidate>Cancelar</button>`;
+$("#chDesc").onclick = () => {
+  dialog(`<h3>Descrição</h3><input class="in" name="d" maxlength="60" placeholder="Ex.: Padaria" value="${esc(qa.desc)}" autofocus>${dlgBtns("OK")}`,
+    f => { qa.desc = f.d.value.trim(); renderAdd(); });
+};
+$("#chParc").onclick = () => {
+  dialog(`<h3>Parcelas</h3><select class="in" name="p">${Array.from({ length: 24 }, (_, i) => `<option value="${i + 1}" ${qa.parcels === i + 1 ? "selected" : ""}>${i ? (i + 1) + "x" : "À vista"}</option>`).join("")}</select>
+    <p class="small muted">O valor digitado é o total da compra. Cada parcela vai para uma fatura.</p>${dlgBtns("OK")}`,
+    f => { qa.parcels = +f.p.value; renderAdd(); });
+};
+$("#chDate").onclick = () => {
+  dialog(`<h3>Data da compra</h3><input class="in" type="date" name="d" value="${qa.date || today()}">${dlgBtns("OK")}`,
+    f => { qa.date = f.d.value && f.d.value !== today() ? f.d.value : null; renderAdd(); });
+};
+
+/* ---------- LER COMPRA (foto/print ou texto) ---------- */
+const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+// palavras-chave -> categoria (a ordem importa: "ubereats" antes de "uber", "mercado livre" antes de "mercado")
+const KEYWORDS = [
+  ["delivery", /ifood|rappi|ubereats|uber eats|ze delivery|zedelivery|james|aiqfome/],
+  ["compras", /amazon(?! ?prime)|mercadolivre|mercado livre|mercadopago|shopee|magalu|magazine|americanas|aliexpress|shein|renner|zara|riachuelo|c ?a\b|centauro|netshoes|kabum/],
+  ["transporte", /uber|\b99\b|99app|99pop|cabify|taxi|metro|cptm|estacion|sem parar|semparar|veloe|conectcar|pedagio|bilhete unico/],
+  ["combustivel", /posto|shell|ipiranga|petrobras|br mania|\bale\b|combust/],
+  ["mercado", /mercado|supermerc|carrefour|pao de acucar|assai|atacad|hortifruti|sams club|\bdia\b|oba|st marche|zaffari|guanabara/],
+  ["saude", /farma|drogasil|raia|droga|pacheco|panvel|hospital|clinica|laborat|dentist|odonto|unimed/],
+  ["assinaturas", /netflix|spotify|prime ?video|amazon ?prime|disney|hbo|\bmax\b|youtube|apple com|icloud|google|deezer|globoplay|paramount|chatgpt|openai|claude|anthropic/],
+  ["restaurante", /restaurante|\brest\b|lanchonete|padaria|burger|mcdonald|mc donald|outback|starbucks|\bcafe|pizz|sushi|churrasc|bar\b|boteco|habibs|subway|madero|coco bambu/],
+  ["lazer", /cinema|cinemark|ingresso|sympla|eventim|steam|playstation|xbox|nintendo|parque|teatro/],
+  ["viagem", /latam|\bgol\b|azul|airbnb|booking|hotel|decolar|123milhas|pousada|hostel/],
+  ["casa", /leroy|telhanorte|tok ?stok|enel|sabesp|light|comgas|claro|vivo|\btim\b|net servicos|camicado|etna/]
+];
+function suggestCat(merchant) {
+  const n = norm(merchant), learn = S.learn || {};
+  if (n && learn[n] && S.categories.some(c => c.id === learn[n])) return learn[n];
+  if (n) for (const [id, re] of KEYWORDS) if (re.test(n) && S.categories.some(c => c.id === id)) return id;
+  return null;
+}
+function parsePurchase(text) {
+  const t = String(text).replace(/\s+/g, " ");
+  const out = { cents: 0, date: null, desc: "", parcels: 1 };
+  // valor: "R$ 67,81" (o OCR às vezes lê "RS" ou "R5")
+  let m = t.match(/R\s?[$S5]\s*:?\s*(\d{1,3}(?:[.\s]?\d{3})*,\s?\d{2})/i) || t.match(/(\d{1,3}(?:\.\d{3})*,\d{2})/);
+  if (m) out.cents = parseMoney(m[1].replace(/\s/g, ""));
+  // data: 23/11/26 ou 23/11/2026 ou 23/11
+  m = t.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if (m) {
+    const d = +m[1], mo = +m[2];
+    let y = m[3] ? +m[3] : new Date().getFullYear();
+    if (y < 100) y += 2000;
+    if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12) {
+      let s = ymd(y, mo - 1, Math.min(d, dim(y, mo - 1)));
+      if (!m[3] && s > today()) s = ymd(y - 1, mo - 1, Math.min(d, dim(y - 1, mo - 1)));
+      out.date = s;
+    }
+  }
+  // loja: "em LOJA," que não começa com número (o primeiro "em" costuma ser a data)
+  const re = /\b(?:em|no estabelecimento|estabelecimento|local)\s*:?\s+([^\d\s,][^,\n]{1,40}?)(?=\s*(?:,|\.\s|\.$|$|\s+aprovad|\s+para\s|\s+em\s|\s+no valor|\s+valor|\s+com\s|\s+foi\s|\s+às|\s+as\s\d))/gi;
+  while ((m = re.exec(t))) {
+    const cand = m[1].trim().replace(/\.$/, "");
+    if (!/^(?:(?:seu|sua|o|a|cart[aã]o|nome|cr[eé]dito|d[eé]bito)\b|\d)/i.test(cand)) { out.desc = cand.slice(0, 60); break; }
+  }
+  // parcelas: "em 3x", "3 parcelas"
+  m = t.match(/\b(\d{1,2})\s*(?:x\b|parcelas)/i);
+  if (m && +m[1] >= 2 && +m[1] <= 24) out.parcels = +m[1];
+  return out;
+}
+
+let tessReady;
+function loadTesseract() {
+  return tessReady = tessReady || new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+    s.onload = () => res(window.Tesseract);
+    s.onerror = () => { tessReady = null; rej(new Error("load")); };
+    document.head.appendChild(s);
+  });
+}
+// prepara a imagem em tamanho bom para OCR; "binarize" gera uma 2ª versão só preto e branco (plano B)
+async function prepImage(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const sc = Math.min(2400, Math.max(1600, img.naturalWidth)) / img.naturalWidth;
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.naturalWidth * sc); c.height = Math.round(img.naturalHeight * sc);
+    c.getContext("2d", { willReadFrequently: true }).drawImage(img, 0, 0, c.width, c.height);
+    return c;
+  } finally { URL.revokeObjectURL(url); }
+}
+function binarize(src) {
+  const c = document.createElement("canvas"); c.width = src.width; c.height = src.height;
+  const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(src, 0, 0);
+  const id = g.getImageData(0, 0, c.width, c.height), px = id.data;
+  let total = 0;
+  for (let i = 0; i < px.length; i += 4) { const v = .299 * px[i] + .587 * px[i + 1] + .114 * px[i + 2]; px[i] = v; total += v; }
+  const mean = total / (px.length / 4), darkBg = mean < 128;
+  for (let i = 0; i < px.length; i += 4) {
+    const ink = darkBg ? px[i] > mean + 40 : px[i] < mean - 40;
+    px[i] = px[i + 1] = px[i + 2] = ink ? 0 : 255;
+  }
+  g.putImageData(id, 0, 0);
+  return c;
+}
+async function ocr(file, onStatus) {
+  onStatus("Carregando leitor de imagem…");
+  const T = await loadTesseract();
+  const canvas = await prepImage(file);
+  let pass = "";
+  const worker = await T.createWorker("por", 1, {
+    logger: m => { if (m.status === "recognizing text") onStatus(`Lendo a imagem${pass}… ${Math.round(m.progress * 100)}%`); else if (/load|init/.test(m.status)) onStatus("Preparando (só demora na primeira vez)…"); }
+  });
+  try {
+    let text = (await worker.recognize(canvas)).data.text;
+    if (!parsePurchase(text).cents) { pass = " de novo"; text += "\n" + (await worker.recognize(binarize(canvas))).data.text; }
+    return text;
+  } finally { worker.terminate(); }
+}
+
+$("#chScan").onclick = () => {
+  dialog(`<h3>Ler compra</h3>
+    <p class="small muted" style="margin-top:-6px">Envie o print da notificação do banco ou uma foto do comprovante. A leitura é feita no próprio celular.</p>
+    <button type="button" class="btn" id="pickPhoto">📷 Escolher foto ou print</button>
+    <div id="ocrStatus" class="small" style="text-align:center;margin:8px 0;color:var(--accent);min-height:18px"></div>
+    <label class="f"><span>ou cole aqui o texto da notificação</span><textarea class="in" name="t" rows="3" placeholder="Compra no cartão final 1234, de R$ 67,81, em 23/11/26..."></textarea></label>
+    <button class="btn sec" value="ok">Ler texto</button><button class="btn sec" value="cancel" formnovalidate>Cancelar</button>`,
+    f => { const txt = f.t.value.trim(); if (!txt) return false; setTimeout(() => showParsed(txt), 0); });
+  $("#pickPhoto").onclick = () => { $("#photoIn").value = ""; $("#photoIn").click(); };
+};
+$("#photoIn").onchange = async e => {
+  const file = e.target.files[0]; if (!file) return;
+  const st = $("#ocrStatus"), btn = $("#pickPhoto"), say = m => { if (st) st.textContent = m; };
+  if (btn) btn.disabled = true;
+  try {
+    const text = await ocr(file, say);
+    $("#dlg").close(); showParsed(text);
+  } catch (err) {
+    say(err && err.message === "load" ? "Sem internet para carregar o leitor. Tente de novo conectado." : "Não consegui ler esta imagem. Tente outra ou cole o texto.");
+    if (btn) btn.disabled = false;
+  }
+};
+function showParsed(text) {
+  const p = parsePurchase(text);
+  if (!p.cents) {
+    const f = dialog(`<h3>Não encontrei o valor</h3>
+      <p class="small muted">Confira o texto lido abaixo, corrija se precisar e toque em Ler texto.</p>
+      <textarea class="in" name="t" rows="6">${esc(text.trim())}</textarea>
+      <button class="btn" value="ok">Ler texto</button><button class="btn sec" value="cancel" formnovalidate>Cancelar</button>`,
+      f => { setTimeout(() => showParsed(f.t.value), 0); });
+    return;
+  }
+  const date = p.date || today(), cat = suggestCat(p.desc);
+  const dup = S.tx.find(t => t.amount === p.cents && t.date === date);
+  dialog(`<h3>Compra encontrada</h3>
+    <div class="amount" style="font-size:36px">${fmt(p.cents)}</div>
+    <label class="f"><span>Loja / descrição</span><input class="in" name="d" maxlength="60" value="${esc(p.desc)}"></label>
+    <div class="row"><label class="f" style="flex:1"><span>Data</span><input class="in" type="date" name="dt" value="${date}" required></label>
+    <label class="f" style="flex:1"><span>Parcelas</span><select class="in" name="p">${Array.from({ length: 24 }, (_, i) => `<option value="${i + 1}" ${p.parcels === i + 1 ? "selected" : ""}>${i ? (i + 1) + "x" : "À vista"}</option>`).join("")}</select></label></div>
+    <label class="f"><span>Categoria${cat ? " (sugerida)" : ""}</span><select class="in" name="c" required>${cat ? "" : `<option value="" selected disabled>Escolha…</option>`}${S.categories.map(c => `<option value="${esc(c.id)}" ${c.id === cat ? "selected" : ""}>${esc(c.emoji + " " + c.name)}</option>`).join("")}</select></label>
+    ${dup ? `<div class="banner" style="color:var(--warn);background:var(--bg)">⚠️ Já existe um lançamento de ${fmt(dup.amount)} em ${br(dup.date)}${dup.desc ? " (" + esc(dup.desc) + ")" : ""}. Confira para não lançar duas vezes.</div>` : ""}
+    ${dlgBtns()}`,
+    f => {
+      if (!f.c.value) { alert("Escolha a categoria."); return false; }
+      if (!f.dt.value) return false;
+      addTx({ id: uid(), date: f.dt.value, amount: p.cents, cat: f.c.value, desc: f.d.value.trim(), parcels: +f.p.value });
+      renderAdd();
+    });
+}
+
+/* ---------- FATURA ---------- */
+let viewK = null;
+function renderInv() {
+  if (viewK === null) viewK = invoiceOf(today());
+  const k = viewK, es = entries(k), tot = sum(es), t = today();
+  const open = openDate(k), close = closeDate(k), due = dueDate(k), nextOpen = openDate(k + 1);
+  $("#invTitle").textContent = `${S.settings.cardName} · ${invLabel(k)}`;
+  const status = (t >= nextOpen || t > close) ? "Fechada" : t >= open ? "Aberta" : "Futura";
+  const b = $("#invBadge"); b.textContent = status; b.classList.toggle("closed", status !== "Aberta");
+  $("#invTotal").textContent = fmt(tot);
+  const g = S.settings.goal;
+  $("#invGoal").textContent = g ? `Meta ${fmt(g)} · ${tot <= g ? "restam " + fmt(g - tot) : "passou " + fmt(tot - g)}` : "Sem meta total definida";
+  const bar = $("#invBar"); bar.style.display = g ? "" : "none";
+  if (g) { const p = tot / g; bar.className = "bar" + (p >= 1 ? " bad" : p >= .8 ? " warn" : ""); bar.firstChild.style.width = Math.min(100, p * 100) + "%"; }
+  $("#dOpen").textContent = br(open); $("#dClose").textContent = br(close); $("#dDue").textContent = br(due);
+  let cd = "";
+  if (status === "Aberta") {
+    const n = daysBetween(t, close), left = Math.max(1, daysBetween(t, nextOpen));
+    cd = n <= 0 ? "Fecha hoje" : n === 1 ? "Fecha amanhã" : `Fecha em ${n} dias`;
+    if (g && tot < g) cd += ` · dá para gastar ~${fmt(Math.floor((g - tot) / left))}/dia`;
+  }
+  else if (status === "Fechada") { const n = daysBetween(t, due); cd = n > 0 ? `Vence em ${n} dias` : n === 0 ? "Vence hoje" : "Vencida"; }
+  $("#invCountdown").textContent = cd;
+  // categorias
+  const by = {};
+  for (const e of es) { const c = catById(e.t.cat); by[c.id] = (by[c.id] || 0) + e.amt; }
+  const rows = Object.entries(by).sort((a, b) => b[1] - a[1]);
+  $("#invCats").innerHTML = rows.length ? rows.map(([id, v]) => {
+    const c = catById(id);
+    return `<div class="catline"><div class="row spread"><span>${esc(c.emoji)} ${esc(c.name)}</span><span><b>${fmt(v)}</b>${c.goal ? ` <span class="small muted">/ ${fmt(c.goal)}</span>` : ` <span class="small muted">${tot ? Math.round(v / tot * 100) : 0}%</span>`}</span></div>${c.goal ? barHtml(v, c.goal) : `<div class="bar"><i style="width:${tot ? v / tot * 100 : 0}%;background:var(--accent)"></i></div>`}</div>`;
+  }).join("") : `<div class="empty">Nada por aqui ainda</div>`;
+  $("#invList").innerHTML = es.length ? es.map(e => {
+    const c = catById(e.t.cat);
+    return `<div class="tx" data-id="${esc(e.t.id)}"><div class="e">${esc(c.emoji)}</div><div class="d"><div>${esc(e.t.desc || c.name)}</div><div class="small muted">${br(e.t.date)}${e.n > 1 ? ` · parcela ${e.i + 1}/${e.n}` : ""}${e.t.desc ? " · " + esc(c.name) : ""}</div></div><div class="v">${fmt(e.amt)}</div></div>`;
+  }).join("") : `<div class="empty">Nenhum lançamento nesta fatura</div>`;
+}
+$("#prevInv").onclick = () => { viewK--; renderInv(); };
+$("#nextInv").onclick = () => { viewK++; renderInv(); };
+$("#invList").onclick = e => { const id = e.target.closest(".tx")?.dataset.id; if (id) editTx(id); };
+$("#adjClose").onclick = () => {
+  const k = viewK;
+  dialog(`<h3>Datas da fatura ${invLabel(k)}</h3>
+    <label class="f"><span>Abre (compras a partir deste dia entram nesta fatura)</span><input class="in" type="date" name="o" value="${openDate(k)}" required></label>
+    <label class="f"><span>Fecha</span><input class="in" type="date" name="c" value="${closeDate(k)}" required></label>
+    <label class="f"><span>Vence</span><input class="in" type="date" name="d" value="${dueDate(k)}" required></label>
+    <p class="small muted">As datas ficam salvas e valem para esta fatura e as próximas. Faturas anteriores não mudam.</p>
+    ${dlgBtns()}`,
+    f => {
+      const o = f.o.value, c = f.c.value, d = f.d.value;
+      if (!o || !c || !d) { alert("Preencha as três datas."); return false; }
+      if (o >= c) { alert("A abertura precisa ser antes do fechamento."); return false; }
+      if (daysBetween(o, c) > 31) { alert("Entre a abertura e o fechamento pode haver no máximo 31 dias."); return false; }
+      if (d <= c) { alert("O vencimento precisa ser depois do fechamento."); return false; }
+      if (daysBetween(c, d) > 40) { alert("O vencimento está longe demais do fechamento."); return false; }
+      if (monthIdx(c) !== k) {
+        const [y, m] = fromIdx(k);
+        alert(`O fechamento desta fatura precisa ficar em ${MONTHS[m].toLowerCase()}/${y}. Para outro mês, use as setas ‹ › e ajuste a fatura daquele mês.`);
+        return false;
+      }
+      const from = k, old = S.settings.schedule.slice();
+      setSchedule(from, +o.slice(8), +c.slice(8), +d.slice(8));
+      if (openDate(from) !== o || closeDate(from) !== c || dueDate(from) !== d) {
+        S.settings.schedule = old;
+        alert("Essas datas não formam um ciclo mensal válido. Confira os meses de abertura, fechamento e vencimento.");
+        return false;
+      }
+      viewK = from; save(); renderInv(); toast("Datas salvas para esta fatura e as próximas");
+    });
+};
+function editTx(id) {
+  const t = S.tx.find(x => x.id === id); if (!t) return;
+  const f = dialog(`<h3>Editar lançamento</h3>
+    <label class="f"><span>Valor total (R$)</span><input class="in" name="a" inputmode="decimal" value="${moneyInput(t.amount)}" required></label>
+    <label class="f"><span>Categoria</span><select class="in" name="c">${S.categories.map(c => `<option value="${esc(c.id)}" ${c.id === catById(t.cat).id ? "selected" : ""}>${esc(c.emoji + " " + c.name)}</option>`).join("")}</select></label>
+    <label class="f"><span>Descrição</span><input class="in" name="d" maxlength="60" value="${esc(t.desc || "")}"></label>
+    <div class="row"><label class="f" style="flex:1"><span>Data</span><input class="in" type="date" name="dt" value="${t.date}" required></label>
+    <label class="f" style="flex:1"><span>Parcelas</span><select class="in" name="p">${Array.from({ length: 24 }, (_, i) => `<option value="${i + 1}" ${(t.parcels || 1) === i + 1 ? "selected" : ""}>${i ? (i + 1) + "x" : "À vista"}</option>`).join("")}</select></label></div>
+    ${dlgBtns()}<button class="btn danger" value="del" formnovalidate>Excluir</button>`,
+    f => { const a = parseMoney(f.a.value); if (!a || !f.dt.value) { alert("Informe valor e data."); return false; }
+      Object.assign(t, { amount: a, cat: f.c.value, desc: f.d.value.trim(), date: f.dt.value, parcels: +f.p.value }); learn(t); save(); render(); });
+  f._extra = v => { if (v === "del") { const i = S.tx.indexOf(t); S.tx.splice(i, 1); save(); render();
+    toast("Lançamento excluído", () => { S.tx.splice(i, 0, t); save(); render(); }); } };
+}
+
+/* ---------- METAS ---------- */
+function renderGoals() {
+  const k = invoiceOf(today()), es = entries(k), tot = sum(es);
+  const gi = $("#goalTotal"); if (document.activeElement !== gi) gi.value = moneyInput(S.settings.goal);
+  $("#goalTotalBar").innerHTML = S.settings.goal ? `<div class="small muted">Fatura atual: ${fmt(tot)} de ${fmt(S.settings.goal)}</div>${barHtml(tot, S.settings.goal)}` : `<div class="small muted">Fatura atual: ${fmt(tot)}</div>`;
+  const sumCatGoals = S.categories.reduce((s, c) => s + (c.goal || 0), 0);
+  $("#goalCats").innerHTML = S.categories.map(c => {
+    const v = sum(es.filter(e => catById(e.t.cat).id === c.id));
+    return `<div class="goalrow"><div class="n"><div>${esc(c.emoji)} ${esc(c.name)}</div><div class="small muted">${fmt(v)}${c.goal ? " de " + fmt(c.goal) : " gastos"}</div>${barHtml(v, c.goal)}</div><input class="in" inputmode="decimal" placeholder="R$" data-g="${esc(c.id)}" value="${moneyInput(c.goal)}"></div>`;
+  }).join("") + (sumCatGoals ? `<div class="small muted" style="margin-top:8px">Soma das metas por categoria: ${fmt(sumCatGoals)}</div>` : "");
+}
+$("#goalTotal").onchange = e => { S.settings.goal = parseMoney(e.target.value); save(); renderGoals(); toast("Meta salva"); };
+$("#goalCats").addEventListener("change", e => {
+  const id = e.target.dataset.g; if (!id) return;
+  catById(id).goal = parseMoney(e.target.value); save(); renderGoals(); toast("Meta salva");
+});
+
+/* ---------- AJUSTES ---------- */
+function renderSet() {
+  const c = cfg(invoiceOf(today()));
+  $("#sName").value = S.settings.cardName; $("#sOpen").value = c.openDay; $("#sClose").value = c.closeDay; $("#sDue").value = c.dueDay;
+  $("#sClose").dataset.prev = c.closeDay;
+  $("#catList").innerHTML = S.categories.map(c => `<div class="goalrow"><div class="n">${esc(c.emoji)} ${esc(c.name)}</div>${c.id === "outros" ? "" : `<button class="x" data-del="${esc(c.id)}" aria-label="Remover">✕</button>`}</div>`).join("");
+}
+// ao mudar o fechamento, a abertura acompanha se estava igual
+$("#sClose").oninput = e => {
+  if ($("#sOpen").value === e.target.dataset.prev) $("#sOpen").value = e.target.value;
+  e.target.dataset.prev = e.target.value;
+};
+$("#saveSet").onclick = () => {
+  const od = Math.round(+$("#sOpen").value), cd = Math.round(+$("#sClose").value), dd = Math.round(+$("#sDue").value);
+  if (![od, cd, dd].every(n => n >= 1 && n <= 31)) { alert("Informe dias entre 1 e 31."); return; }
+  setSchedule(S.settings.configured ? invoiceOf(today()) : 0, od, cd, dd);
+  Object.assign(S.settings, { cardName: $("#sName").value.trim() || "Meu cartão", configured: true });
+  save(); viewK = null; toast("Ajustes salvos"); render();
+};
+$("#addCat").onclick = () => {
+  const name = $("#newCat").value.trim(); if (!name) return;
+  let id = name.toLowerCase().normalize("NFD").replace(/[^\w]/g, "") || uid();
+  if (S.categories.some(c => c.id === id)) id += "_" + uid().slice(-4);
+  S.categories.splice(S.categories.length - 1, 0, { id, name, emoji: $("#newEmoji").value.trim() || "🏷️", goal: 0 });
+  $("#newCat").value = ""; $("#newEmoji").value = ""; save(); renderSet(); toast("Categoria adicionada");
+};
+$("#catList").onclick = e => {
+  const id = e.target.dataset.del; if (!id) return;
+  const c = catById(id), n = S.tx.filter(t => t.cat === id).length;
+  if (!confirm(`Remover "${c.name}"?${n ? ` Os ${n} lançamentos dela irão para "Outros".` : ""}`)) return;
+  S.tx.forEach(t => { if (t.cat === id) t.cat = "outros"; });
+  S.categories = S.categories.filter(x => x.id !== id); save(); renderSet();
+};
+$("#exportBtn").onclick = async () => {
+  const name = `meucartao-backup-${today()}.json`;
+  const file = new File([JSON.stringify(S, null, 1)], name, { type: "application/json" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if (e.name === "AbortError") return; }
+  }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+$("#importBtn").onclick = () => $("#importFile").click();
+$("#importFile").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (!d || !Array.isArray(d.tx) || !Array.isArray(d.categories) || !d.settings) throw 0;
+    if (!confirm(`Substituir os dados atuais por este backup (${d.tx.length} lançamentos)?`)) return;
+    S = migrate(d); save(); viewK = null; render(); toast("Backup importado");
+  } catch (_) { alert("Arquivo de backup inválido."); }
+  e.target.value = "";
+};
+$("#wipeBtn").onclick = () => {
+  if (!confirm("Apagar TODOS os lançamentos, metas e ajustes? Isso não pode ser desfeito.")) return;
+  S = defaults(); save(); viewK = null; render(); toast("Dados apagados");
+};
+
+/* ---------- render geral ---------- */
+function render() {
+  ({ add: renderAdd, inv: renderInv, goals: renderGoals, set: renderSet })[curView]();
+}
+
+/* ---------- entrada pela URL (Atalhos do iPhone) ----------
+   ?valor=45,90&cat=Mercado&desc=Padaria&parcelas=3   ou   ?tela=fatura */
+(function fromUrl() {
+  const p = new URLSearchParams(location.search);
+  const telas = { lancar: "add", fatura: "inv", metas: "goals", ajustes: "set" };
+  if (p.has("valor")) {
+    const amount = parseMoney(p.get("valor")), q = (p.get("cat") || "").trim().toLowerCase();
+    const c = S.categories.find(c => c.id === q || c.name.toLowerCase() === q) || catById("outros");
+    if (amount) {
+      const parcels = Math.min(24, Math.max(1, parseInt(p.get("parcelas")) || 1));
+      setTimeout(() => addTx({ id: uid(), date: today(), amount, cat: c.id, desc: (p.get("desc") || "").slice(0, 60), parcels }), 300);
+    }
+  }
+  history.replaceState(null, "", location.pathname);
+  show(telas[p.get("tela")] || (S.settings.configured ? "add" : "set"));
+})();
+if (!S.settings.configured) curView === "set" || show("set");
+
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
+document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
+</script>
+</body>
+</html>
