@@ -105,6 +105,12 @@ nav button.on{color:var(--accent)}
 .tx .v{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .catline{margin:10px 0}
 .empty{text-align:center;color:var(--muted);padding:20px 0}
+.search{position:relative;margin-bottom:10px}
+.search .in{padding-left:36px;padding-right:38px;background:var(--card);border-color:var(--card);-webkit-appearance:none;appearance:none}
+.search::before{content:"🔍";position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;opacity:.7;pointer-events:none}
+.search input::-webkit-search-cancel-button{display:none}
+.search button{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:50%;color:var(--muted);font-size:14px}
+mark{background:var(--accent-soft);color:var(--text);border-radius:3px;padding:0 1px}
 /* forms */
 label.f{display:block;margin-bottom:12px}
 label.f span{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
@@ -178,7 +184,11 @@ dialog h3{margin:0 0 12px}
     <div class="card" id="invCats"></div>
     <h2 id="cardsH" hidden>Por cartão</h2>
     <div class="card" id="invCards" hidden></div>
-    <h2>Lançamentos</h2>
+    <h2 id="listH">Lançamentos</h2>
+    <div class="search">
+      <input class="in" id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Buscar em todas as faturas: loja, valor, categoria…">
+      <button type="button" id="qClear" aria-label="Limpar busca" hidden>✕</button>
+    </div>
     <div class="card" id="invList"></div>
   </section>
 
@@ -253,7 +263,7 @@ dialog h3{margin:0 0 12px}
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <button class="btn danger" id="wipeBtn">🧹 Limpar lançamentos…</button>
     </div>
-    <p class="small muted" style="text-align:center">Meu Cartão · v9</p>
+    <p class="small muted" style="text-align:center">Meu Cartão · v10</p>
   </section>
 </main>
 
@@ -948,6 +958,8 @@ function renderInv() {
     $("#invTotal").textContent = fmt(bk.total);
     $("#invGoal").textContent = "Valor informado pelo banco (sem compras no app)" + (bk.paid != null ? " · " + payInfo(k, bk.total) : "");
   } else if (bk && !bk.partial) $("#invGoal").textContent += ` · Banco: ${fmt(bk.total)}${bk.paid != null ? " · " + payInfo(k, bk.total) : ""}`;
+  if ($("#q").value.trim()) { renderSearch(); return; }
+  $("#listH").textContent = "Lançamentos";
   $("#invList").innerHTML = es.length ? es.map(e => {
     const c = catById(e.t.cat);
     return `<div class="tx" data-id="${esc(e.t.id)}"><div class="e">${esc(c.emoji)}</div><div class="d"><div>${esc(e.t.desc || c.name)}</div><div class="small muted">${br(e.t.date)}${e.n > 1 || e.t.pTotal ? ` · parcela ${e.i + 1 + (e.t.pOff || 0)}/${e.t.pTotal || e.n}` : ""}${e.t.card ? " · final " + esc(e.t.card) : ""}${e.t.desc ? " · " + esc(c.name) : ""}</div></div><div class="v">${fmt(e.amt)}</div></div>`;
@@ -956,6 +968,37 @@ function renderInv() {
 $("#prevInv").onclick = () => { viewK--; renderInv(); };
 $("#nextInv").onclick = () => { viewK++; renderInv(); };
 $("#invList").onclick = e => { const id = e.target.closest(".tx")?.dataset.id; if (id) editTx(id); };
+/* busca em todos os lançamentos: loja, categoria, cartão, valor (100,35) e data (11/11) */
+function txHay(t) {
+  const c = catById(t.cat), d = t.date, per = t.parcels > 1 ? Math.floor(t.amount / t.parcels) : null;
+  return norm([t.desc, c.name, t.card ? "final " + t.card : "", fmt(t.amount), (t.amount / 100).toFixed(2), per ? fmt(per) : "",
+    `${d.slice(8)}/${d.slice(5, 7)}/${d.slice(0, 4)}`, invLabel(baseInv(t)), t.parcels > 1 ? t.parcels + "x" : ""].join(" "));
+}
+function hl(text, words) { // destaca os termos buscados
+  let s = esc(text);
+  for (const w of words) if (w.length > 1) s = s.replace(new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), m => `<mark>${m}</mark>`);
+  return s;
+}
+function renderSearch() {
+  const raw = $("#q").value.trim(), words = norm(raw).split(" ").filter(Boolean);
+  const res = S.tx.filter(t => { const h = " " + txHay(t) + " "; return words.every(w => h.includes(w)); })
+    .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  const total = res.reduce((s, t) => s + t.amount, 0);
+  $("#listH").textContent = res.length ? `${res.length} resultado${res.length > 1 ? "s" : ""} · ${fmt(total)}` : "Nenhum resultado";
+  const rawWords = raw.split(/\s+/).filter(Boolean);
+  $("#invList").innerHTML = res.length ? res.slice(0, 150).map(t => {
+    const c = catById(t.cat), n = t.parcels || 1;
+    const parc = t.pTotal ? ` · parcelas ${(t.pOff || 0) + 1}–${(t.pOff || 0) + n}/${t.pTotal}` : n > 1 ? ` · ${n}x de ${fmt(Math.floor(t.amount / n))}` : "";
+    return `<div class="tx" data-id="${esc(t.id)}"><div class="e">${esc(c.emoji)}</div><div class="d">
+      <div>${hl(t.desc || c.name, rawWords)}</div>
+      <div class="small muted">${br(t.date)}/${t.date.slice(2, 4)} · ${invLabel(baseInv(t))}${parc}${t.card ? " · final " + esc(t.card) : ""} · ${esc(c.name)}</div></div>
+      <div class="v">${fmt(t.amount)}</div></div>`;
+  }).join("") + (res.length > 150 ? `<div class="empty">Mostrando 150 de ${res.length}. Refine a busca.</div>` : "")
+    : `<div class="empty">Nada encontrado para "${esc(raw)}"</div>`;
+}
+$("#q").oninput = () => { $("#qClear").hidden = !$("#q").value; renderInv(); };
+$("#q").onkeydown = e => { if (e.key === "Enter") e.target.blur(); };
+$("#qClear").onclick = () => { $("#q").value = ""; $("#qClear").hidden = true; renderInv(); };
 $("#adjClose").onclick = () => {
   const k = viewK;
   dialog(`<h3>Datas da fatura ${invLabel(k)}</h3>
