@@ -21,6 +21,7 @@
   --key:#26272c;--key-press:#34363c;--toast:#2f3138;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
 html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;-webkit-user-select:none;user-select:none}
 input,select,textarea{-webkit-user-select:text;user-select:text;font:inherit;color:inherit}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
@@ -161,6 +162,8 @@ dialog h3{margin:0 0 12px}
     </div>
     <h2>Por categoria</h2>
     <div class="card" id="invCats"></div>
+    <h2 id="cardsH" hidden>Por cartão</h2>
+    <div class="card" id="invCards" hidden></div>
     <h2>Lançamentos</h2>
     <div class="card" id="invList"></div>
   </section>
@@ -173,6 +176,7 @@ dialog h3{margin:0 0 12px}
       <div class="tile"><span class="lg-dot closed"></span><div class="small muted">Última fechada</div><b id="tLast"></b><div class="small muted" id="tLastSub"></div></div>
       <div class="tile"><div class="small muted">Total das fechadas</div><b id="tClosed"></b><div class="small muted" id="tClosedSub"></div></div>
       <div class="tile"><span class="lg-dot future"></span><div class="small muted">Próximas (parcelas)</div><b id="tFuture"></b><div class="small muted" id="tFutureSub"></div></div>
+      <div class="tile" id="tLimit" style="grid-column:1/-1" hidden></div>
     </div>
     <div class="card">
       <div class="row spread"><b>Total por fatura</b><span class="small muted" id="chAvg"></span></div>
@@ -226,9 +230,9 @@ dialog h3{margin:0 0 12px}
       <button class="btn sec" id="exportBtn">Exportar backup</button>
       <button class="btn sec" id="importBtn">Importar backup</button>
       <input type="file" id="importFile" accept="application/json,.json" hidden>
-      <button class="btn danger" id="wipeBtn">Apagar todos os dados</button>
+      <button class="btn danger" id="wipeBtn">🧹 Limpar lançamentos…</button>
     </div>
-    <p class="small muted" style="text-align:center">Meu Cartão · v6</p>
+    <p class="small muted" style="text-align:center">Meu Cartão · v7</p>
   </section>
 </main>
 
@@ -312,7 +316,7 @@ function addDays(s, n) { const d = new Date(s + "T12:00"); d.setDate(d.getDate()
 function entries(k) {
   const out = [];
   for (const t of S.tx) {
-    const n = t.parcels || 1, i = k - invoiceOf(t.date);
+    const n = t.parcels || 1, i = k - baseInv(t);
     if (i >= 0 && i < n) {
       const base = Math.floor(t.amount / n);
       out.push({ t, i, n, amt: base + (i === 0 ? t.amount - base * n : 0) });
@@ -438,17 +442,17 @@ $("#chDate").onclick = () => {
 const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 // palavras-chave -> categoria (a ordem importa: "ubereats" antes de "uber", "mercado livre" antes de "mercado")
 const KEYWORDS = [
-  ["delivery", /ifood|rappi|ubereats|uber eats|ze delivery|zedelivery|james|aiqfome/],
-  ["compras", /amazon(?! ?prime)|mercadolivre|mercado livre|mercadopago|shopee|magalu|magazine|americanas|aliexpress|shein|renner|zara|riachuelo|c ?a\b|centauro|netshoes|kabum/],
+  ["delivery", /ifood|\bifd\b|rappi|ubereats|uber eats|ze delivery|zedelivery|james|aiqfome/],
+  ["compras", /amazon(?! ?prime)|mercadolivre|mercado livre|mercadopago|shopee|magalu|magazine|americanas|aliexpress|shein|renner|zara|riachuelo|c ?a\b|centauro|netshoes|kabum|outlet|aramis|dafiti|tiktok shop|cacau show|\bmp mercadolivre/],
   ["transporte", /uber|\b99\b|99app|99pop|cabify|taxi|metro|cptm|estacion|sem parar|semparar|veloe|conectcar|pedagio|bilhete unico/],
   ["combustivel", /posto|shell|ipiranga|petrobras|br mania|\bale\b|combust/],
-  ["mercado", /mercado|supermerc|carrefour|pao de acucar|assai|atacad|hortifruti|sams club|\bdia\b|oba|st marche|zaffari|guanabara/],
+  ["mercado", /mercado|supermerc|carrefour|pao de acucar|assai|atacad|hortifruti|\bhort\b|sams club|\bdia\b|\boba\b|st marche|zaffari|guanabara/],
   ["saude", /farma|drogasil|raia|droga|pacheco|panvel|hospital|clinica|laborat|dentist|odonto|unimed/],
-  ["assinaturas", /netflix|spotify|prime ?video|amazon ?prime|disney|hbo|\bmax\b|youtube|apple com|icloud|google|deezer|globoplay|paramount|chatgpt|openai|claude|anthropic/],
-  ["restaurante", /restaurante|\brest\b|lanchonete|padaria|burger|mcdonald|mc donald|outback|starbucks|\bcafe|pizz|sushi|churrasc|bar\b|boteco|habibs|subway|madero|coco bambu/],
-  ["lazer", /cinema|cinemark|ingresso|sympla|eventim|steam|playstation|xbox|nintendo|parque|teatro/],
+  ["assinaturas", /assinatura|starlink|melimais|netflix|spotify|prime ?video|amazon ?prime|disney|hbo|\bmax\b|youtube|apple com|icloud|google|deezer|globoplay|paramount|chatgpt|openai|claude|anthropic/],
+  ["restaurante", /restaurante|ristorante|trattoria|\brest\b|lanchonete|padaria|burger|mcdonald|mc donald|outback|starbucks|\bcafe|pizz|sushi|churrasc|bar\b|boteco|habibs|subway|madero|coco bambu/],
+  ["lazer", /ticketmaster|tap house|cinema|cinemark|ingresso|sympla|eventim|steam|playstation|xbox|nintendo|parque|teatro/],
   ["viagem", /latam|\bgol\b|azul|airbnb|booking|hotel|decolar|123milhas|pousada|hostel/],
-  ["casa", /leroy|telhanorte|tok ?stok|enel|sabesp|light|comgas|claro|vivo|\btim\b|net servicos|camicado|etna/]
+  ["casa", /sodimac|casa do construtor|agropet|leroy|telhanorte|tok ?stok|enel|sabesp|light|comgas|claro|vivo|\btim\b|net servicos|camicado|etna/]
 ];
 function suggestCat(merchant) {
   const n = norm(merchant), learn = S.learn || {};
@@ -573,6 +577,113 @@ async function ocrCanvases(canvases, onStatus) {
   try { let out = ""; for (const c of canvases) { n++; out += (await w.recognize(c)).data.text + "\n"; } return out; }
   finally { w.terminate(); }
 }
+// agrupa itens de texto (x, y) em linhas, de cima para baixo
+function rowsOf(items) {
+  const out = [], sorted = items.slice().sort((a, b) => b.y - a.y || a.x - b.x);
+  let row = [], rowY = null;
+  const flush = () => { if (row.length) out.push(row.sort((a, b) => a.x - b.x).map(i => i.s).join(" ")); row = []; };
+  for (const it of sorted) { if (rowY === null || Math.abs(it.y - rowY) > 3) { flush(); rowY = it.y; } row.push(it); }
+  flush();
+  return out;
+}
+// lê um PDF: linhas em ordem de leitura (as duas colunas do detalhamento separadas) + itens da 1ª página
+async function readPdf(file, onStatus) {
+  onStatus("Abrindo o PDF…");
+  const lib = await loadPdfJs(), data = new Uint8Array(await file.arrayBuffer());
+  let doc, password;
+  for (;;) {
+    try { doc = await lib.getDocument({ data: data.slice(), password }).promise; break; }
+    catch (e) {
+      if (!e || e.name !== "PasswordException") throw e;
+      password = prompt(e.code === 2 ? "Senha incorreta. Digite a senha do PDF:" : "Este PDF tem senha (muitos bancos usam os primeiros dígitos do CPF). Digite a senha:");
+      if (password == null) throw new Error("cancel");
+    }
+  }
+  const lines = [], first = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    onStatus(`Lendo página ${p} de ${doc.numPages}…`);
+    const page = await doc.getPage(p), w = page.getViewport({ scale: 1 }).width;
+    const items = (await page.getTextContent()).items.filter(it => it.str.trim()).map(it => ({ x: it.transform[4], y: it.transform[5], s: it.str.trim() }));
+    if (p === 1) first.push(...items);
+    const detail = items.some(it => /Detalhamento da Fatura/i.test(it.s));
+    const cols = detail ? [items.filter(it => it.x < w / 2), items.filter(it => it.x >= w / 2)] : [items];
+    for (const c of cols) lines.push(...rowsOf(c));
+  }
+  if (lines.join("").length >= 80) return { lines, first };
+  return { lines: await pdfOcr(doc, onStatus), first: [] };
+}
+async function pdfOcr(doc, onStatus) {
+  const canvases = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    onStatus(`Preparando página ${p} de ${doc.numPages}…`);
+    const page = await doc.getPage(p), vp = page.getViewport({ scale: 2.5 }), c = document.createElement("canvas");
+    c.width = vp.width; c.height = vp.height;
+    await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+    canvases.push(c);
+  }
+  return (await ocrCanvases(canvases, onStatus)).split("\n");
+}
+// valor abaixo de um rótulo na 1ª página (ex.: "Total a Pagar" -> "R$ 8.842,54")
+function valueBelow(items, labelRe, valRe) {
+  const l = items.find(it => labelRe.test(it.s)); if (!l) return null;
+  const v = items.filter(it => it !== l && it.y < l.y && l.y - it.y < 25 && Math.abs(it.x - l.x) < 40 && valRe.test(it.s)).sort((a, b) => b.y - a.y)[0];
+  return v ? v.s.match(valRe)[0] : null;
+}
+const dmy = s => { const m = s.match(/(\d{2})\/(\d{2})\/(\d{2,4})/); if (!m) return null; const y = +m[3] < 100 ? 2000 + +m[3] : +m[3]; return ymd(y, +m[2] - 1, +m[1]); };
+// interpreta a fatura inteira: dados do banco + linhas de compras por cartão e seção
+function parseInvoice(lines, first) {
+  const text = lines.join("\n"), meta = { history: [] };
+  const money = /R\$\s?-?[\d.]+,\d{2}/;
+  if (first.length) {
+    const g = re => { const v = valueBelow(first, re, money); return v ? parseMoney(v.replace(/R\$\s?/, "")) : null; };
+    meta.total = g(/^Total a Pagar/i);
+    const due = valueBelow(first, /^Vencimento$/i, /\d{2}\/\d{2}\/\d{4}/); meta.due = due ? dmy(due) : null;
+    const lt = g(/^Seu limite/i), lu = g(/^Limite utilizado/i), la = g(/^Limite Dispon/i);
+    if (lt) meta.limit = { total: lt, used: lu, avail: la };
+  }
+  const hRe = /\b(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\.?\s+R\$\s?([\d.]+,\d{2})\s+(R\$\s?[\d.]+,\d{2}|Esta Fatura|Fatura Aberta)\s+(\d{2}\/\d{2}\/\d{2,4})\s+a\s+(\d{2}\/\d{2}\/\d{2,4})/gi;
+  for (const m of text.matchAll(hRe)) {
+    const open = dmy(m[4]), close = dmy(m[5]); if (!open || !close) continue;
+    const kind = /esta/i.test(m[3]) ? "this" : /aberta/i.test(m[3]) ? "open" : "past";
+    meta.history.push({ k: monthIdx(close), open, close, total: parseMoney(m[2]), paid: kind === "past" ? parseMoney(m[3].replace(/R\$\s?/, "")) : null, kind });
+  }
+  const self = meta.history.find(h => h.kind === "this");
+  if (self) { meta.k = self.k; meta.open = self.open; meta.close = self.close; if (meta.total == null) meta.total = self.total; }
+  const fut = text.match(/obriga[cç][oõ]es futuras[\s\S]{0,250}?([\d.]+,\d{2})/i);
+  if (fut) meta.future = parseMoney(fut[1]);
+  // linhas de compras
+  const refClose = meta.close || today(), cy = +refClose.slice(0, 4), cm = +refClose.slice(5, 7);
+  const ROW = /^(?:\S{1,3}\s+)?(\d{2})\/(\d{2})\s+(.+?)\s+(?:(\d{2})\/(\d{2})\s+)?(-?\s?[\d.]+,\d{2})(?:\s+-?[\d.]+,\d{2})?$/;
+  const rows = []; let section = null, card = null;
+  for (const raw of lines) {
+    const l = raw.replace(/\s+/g, " ").trim();
+    const cm4 = l.match(/\d{4}\s*X{4}\s*X{4}\s*(\d{4})/i);
+    if (cm4) { card = cm4[1]; continue; }
+    if (/Pagamento e Demais Cr[eé]ditos/i.test(l)) { section = "cred"; continue; }
+    if (/^Parcelamentos\b/i.test(l)) { section = "parc"; continue; }
+    if (/^Despesas\b/i.test(l)) { section = "desp"; continue; }
+    if (/^Resumo da Fatura|^Saldo total consolidado/i.test(l)) { section = null; continue; }
+    if (!section) continue;
+    const m = l.match(ROW); if (!m) continue;
+    const d = +m[1], mo = +m[2]; if (d < 1 || d > 31 || mo < 1 || mo > 12) continue;
+    const y = mo > cm ? cy - 1 : cy;
+    const cents = parseMoney(m[6].replace(/[-\s]/g, "")) * (/-/.test(m[6]) ? -1 : 1);
+    if (!cents) continue;
+    const desc = m[3].trim(), i = m[4] ? +m[4] : 0, n = m[5] ? +m[5] : 0;
+    rows.push({ card, section, date: ymd(y, mo - 1, Math.min(d, dim(y, mo - 1))), desc: desc.slice(0, 60), i: n >= 2 && i >= 1 && i <= n ? i : 0, n: n >= 2 && i >= 1 && i <= n ? n : 0, cents, payment: cents < 0 && /PAGAMENTO/i.test(desc) });
+  }
+  // a mesma compra pode aparecer em várias linhas (ex.: parcelas 01/06 a 06/06 cobradas juntas): junta e usa a maior parcela
+  const groups = [];
+  for (const r of rows.filter(r => r.n && r.cents > 0)) {
+    const key = r.card + "|" + r.date + "|" + norm(r.desc) + "|" + r.n;
+    const g = groups.find(g => g.key === key && !g.is.includes(r.i));
+    if (g) { g.is.push(r.i); g.i = Math.max(g.i, r.i); g.now += r.cents; g.cents = r.cents; }
+    else groups.push({ key, card: r.card, date: r.date, desc: r.desc, n: r.n, i: r.i, is: [r.i], now: r.cents, cents: r.cents });
+  }
+  meta.rows = rows; meta.groups = groups;
+  meta.sum = rows.filter(r => !r.payment).reduce((s, r) => s + r.cents, 0);
+  return meta;
+}
 // extrai as linhas de texto de um PDF; se for escaneado (sem texto), usa OCR nas páginas
 async function pdfToLines(file, onStatus) {
   onStatus("Abrindo o PDF…");
@@ -639,11 +750,8 @@ function parseInstallments(lines) {
   return out;
 }
 function importInvoiceDialog() {
-  const cur = invoiceOf(today()), opts = [];
-  for (let k = cur - 1; k >= cur - 6; k--) opts.push(k);
   dialog(`<h3>Importar fatura fechada</h3>
-    <p class="small muted" style="margin-top:-6px">Envie o PDF da fatura (ou prints das páginas). O app encontra as compras parceladas e lança as parcelas que ainda faltam nas próximas faturas. Tudo é lido no próprio celular.</p>
-    <label class="f"><span>Qual fatura é esta?</span><select class="in" name="k">${opts.map(k => `<option value="${k}">${invLabel(k)} (fechou em ${br(closeDate(k))})</option>`).join("")}</select></label>
+    <p class="small muted" style="margin-top:-6px">Envie o PDF da fatura (ou prints das páginas). O app lê as compras, as parcelas que faltam, as datas do cartão, o histórico de pagamentos e o limite. Você revisa tudo antes. A leitura é feita no próprio celular.</p>
     <button type="button" class="btn" id="pickInv">📄 Escolher PDF ou prints</button>
     <div id="ocrStatus" class="small" style="text-align:center;margin:8px 0;color:var(--accent);min-height:18px"></div>
     <button class="btn sec" value="cancel" formnovalidate>Cancelar</button>`);
@@ -651,94 +759,125 @@ function importInvoiceDialog() {
 }
 $("#invIn").onchange = async e => {
   const files = [...e.target.files]; if (!files.length) return;
-  const f = $("#dlgForm"), k = +f.k.value, st = $("#ocrStatus"), btn = $("#pickInv"), say = m => { if (st) st.textContent = m; };
+  const st = $("#ocrStatus"), btn = $("#pickInv"), say = m => { if (st) st.textContent = m; };
   if (btn) btn.disabled = true;
   try {
-    let lines = [];
+    let lines = [], first = [];
     const imgs = files.filter(x => !/pdf/i.test(x.type) && !/\.pdf$/i.test(x.name));
-    for (const x of files) if (!imgs.includes(x)) lines = lines.concat(await pdfToLines(x, say));
+    for (const x of files) if (!imgs.includes(x)) { const r = await readPdf(x, say); lines = lines.concat(r.lines); if (!first.length) first = r.first; }
     if (imgs.length) {
       say("Preparando imagens…");
       const canv = []; for (const x of imgs) canv.push(await prepImage(x));
       lines = lines.concat((await ocrCanvases(canv, say)).split("\n"));
     }
     $("#dlg").close();
-    showInstallments(parseInstallments(lines), k);
+    const meta = parseInvoice(lines, first);
+    if (!meta.rows.length) { // formato desconhecido: só as parcelas, pelo leitor genérico
+      meta.groups = parseInstallments(lines).map(it => ({ ...it, now: it.cents, date: null, card: null }));
+    }
+    showInvoiceImport(meta);
   } catch (err) {
     say(err && err.message === "cancel" ? "Importação cancelada." : err && err.message === "load" ? "Sem internet para carregar o leitor. Tente de novo conectado." : "Não consegui ler este arquivo. Tente o PDF original do banco ou prints nítidos.");
     if (btn) btn.disabled = false;
   }
 };
-function showInstallments(items, k) {
-  if (!items.length) {
-    dialog(`<h3>Nenhuma parcela encontrada</h3>
-      <p class="small muted">Não achei compras parceladas nesta fatura (no formato "LOJA 03/10 120,00"). Se você enviou prints, tente imagens mais nítidas ou o PDF original do banco. Também dá para lançar manualmente usando o botão Parcelas.</p>
+// fatura em que um lançamento entra (pode ser fixada pela importação)
+const baseInv = t => t.inv != null ? t.inv : invoiceOf(t.date);
+// grava as datas exatas de uma fatura, sem mudar as seguintes
+function setInvoiceDates(k, openDay, closeDay, dueDay) {
+  const sch = S.settings.schedule, next = sch.find(s => s.from === k + 1) || { ...cfg(k + 1) };
+  S.settings.schedule = sch.filter(s => s.from !== k && s.from !== k + 1)
+    .concat({ from: k, openDay, closeDay, dueDay }, { ...next, from: k + 1 })
+    .sort((a, b) => a.from - b.from);
+}
+function showInvoiceImport(meta) {
+  const cur = invoiceOf(today());
+  let k = meta.k;
+  const kOpts = []; for (let x = cur - 1; x >= cur - 12; x--) kOpts.push(x);
+  if (k != null && !kOpts.includes(k)) kOpts.unshift(k);
+  const groups = meta.groups || [], fut = groups.filter(g => g.i < g.n);
+  const hist = (meta.rows || []).filter(r => !r.payment);
+  if (!fut.length && !hist.length) {
+    dialog(`<h3>Não consegui ler esta fatura</h3>
+      <p class="small muted">Não encontrei compras nem parcelas. Se você enviou prints, tente imagens mais nítidas ou o PDF original do banco. Se o formato for de outro banco, me mande um exemplo para ajustar o leitor.</p>
       <button class="btn" value="cancel">OK</button>`);
     return;
   }
-  const rows = items.map((it, idx) => {
-    const rem = it.n - it.i;
-    const dup = S.tx.find(t => (t.pTotal || t.parcels) === it.n && Math.abs(Math.round(t.amount / (t.parcels || 1)) - it.cents) <= 2);
-    const cat = suggestCat(it.desc) || "outros";
+  const remTotal = fut.reduce((s, g) => s + g.cents * (g.n - g.i), 0);
+  const ok = meta.total != null && Math.abs(meta.sum - meta.total) <= 100;
+  const hasDates = meta.history.some(h => h.kind === "open") && meta.open && meta.close && meta.due;
+  const cards = [...new Set(hist.map(r => r.card).filter(Boolean))];
+  const inK = k != null ? S.tx.filter(t => baseInv(t) === k).length : 0;
+  const rows = fut.map((g, idx) => {
+    const rem = g.n - g.i;
+    const dup = S.tx.find(t => (t.pTotal || t.parcels) === g.n && Math.abs(Math.round(t.amount / (t.parcels || 1)) - g.cents) <= 2 && (!g.date || !t.pTotal || t.date === g.date));
+    const cat = suggestCat(g.desc) || "outros";
     return `<div class="imp">
-      <label class="row"><input type="checkbox" name="on${idx}" ${rem > 0 && !dup ? "checked" : ""} ${rem > 0 ? "" : "disabled"}><b style="flex:1;min-width:0">${esc(it.desc)}</b></label>
-      <div class="small muted">Parcela ${it.i}/${it.n} de ${fmt(it.cents)} · ${rem > 0 ? `faltam ${rem} (${fmt(it.cents * rem)})` : "era a última parcela"}${dup ? ` · <span style="color:var(--warn)">parece já lançado</span>` : ""}</div>
-      ${rem > 0 ? `<select class="in" name="c${idx}">${S.categories.map(c => `<option value="${esc(c.id)}" ${c.id === cat ? "selected" : ""}>${esc(c.emoji + " " + c.name)}</option>`).join("")}</select>` : ""}
+      <label class="row"><input type="checkbox" name="on${idx}" ${dup ? "" : "checked"}><b style="flex:1;min-width:0">${esc(g.desc)}</b></label>
+      <div class="small muted">${g.date ? br(g.date) + " · " : ""}${g.card ? "final " + esc(g.card) + " · " : ""}parcela ${g.i}/${g.n} de ${fmt(g.cents)} · faltam ${rem} (${fmt(g.cents * rem)})${dup ? ` · <span style="color:var(--warn)">parece já lançado</span>` : ""}</div>
+      <select class="in" name="c${idx}">${S.categories.map(c => `<option value="${esc(c.id)}" ${c.id === cat ? "selected" : ""}>${esc(c.emoji + " " + c.name)}</option>`).join("")}</select>
     </div>`;
   }).join("");
-  const remTotal = items.reduce((s, it) => s + it.cents * (it.n - it.i), 0);
-  dialog(`<h3>Parcelas encontradas</h3>
-    <p class="small muted" style="margin-top:-6px">${items.length} compra${items.length > 1 ? "s" : ""} parcelada${items.length > 1 ? "s" : ""} na fatura ${invLabel(k)}. Restam ${fmt(remTotal)}, que entram a partir da fatura ${invLabel(k + 1)}. Desmarque o que não quiser lançar.</p>
-    ${rows}${dlgBtns("Lançar parcelas")}`,
+  const openH = meta.history.find(h => h.kind === "open");
+  const dueDay = meta.due ? +meta.due.slice(8) : null;
+  dialog(`<h3>Importar fatura</h3>
+    <label class="f"><span>Fatura</span><select class="in" name="k">${k == null ? `<option value="" selected disabled>Escolha qual fatura é esta…</option>` : ""}${kOpts.map(x => `<option value="${x}" ${x === k ? "selected" : ""}>${invLabel(x)}${x === k ? " (lida do PDF)" : ""}</option>`).join("")}</select></label>
+    ${meta.total != null ? `<div class="banner" style="${ok ? "" : "color:var(--warn);background:var(--bg)"}">${ok ? "✓" : "⚠️"} Total da fatura ${fmt(meta.total)}${meta.due ? " · vence " + br(meta.due) : ""}. ${ok ? "As compras lidas somam exatamente esse valor." : `As compras lidas somam ${fmt(meta.sum)}. Confira antes de importar.`}</div>` : ""}
+
+    ${hist.length ? `<div class="imp"><label class="row"><input type="checkbox" name="hist" ${inK ? "" : "checked"}><b style="flex:1">Compras desta fatura (histórico)</b></label>
+      <div class="small muted">${hist.length} lançamentos (${fmt(meta.sum)})${cards.length > 1 ? ` de ${cards.length} cartões (finais ${cards.join(", ")})` : ""}, incluindo estornos e a parcela cobrada neste mês. A categoria é sugerida pela loja.${inK ? ` <span style="color:var(--warn)">Você já tem ${inK} lançamento${inK > 1 ? "s" : ""} nesta fatura; importar pode duplicar.</span>` : ""}</div></div>` : ""}
+
+    ${hasDates ? `<div class="imp"><label class="row"><input type="checkbox" name="dates" checked><b style="flex:1">Atualizar as datas do cartão</b></label>
+      <div class="small muted">Esta fatura: ${br(meta.open)} a ${br(meta.close)}, vence ${br(meta.due)}. Fatura aberta: ${br(openH.open)} a ${br(openH.close)}. Próximas: fecha dia ${+openH.close.slice(8)}, vence dia ${dueDay}.</div></div>` : ""}
+
+    ${meta.history.length || meta.limit ? `<div class="imp"><label class="row"><input type="checkbox" name="bank" checked><b style="flex:1">Guardar dados do banco</b></label>
+      <div class="small muted">${meta.history.filter(h => h.kind !== "open").length} faturas com total e pagamento${meta.limit ? `, limite ${fmt(meta.limit.total)} (disponível ${fmt(meta.limit.avail)})` : ""}${meta.future ? `, parcelas futuras segundo o banco: ${fmt(meta.future)}` : ""}. Aparecem na aba Resumo.</div></div>` : ""}
+
+    ${fut.length ? `<h2 style="margin-top:16px">Parcelas que faltam · ${fmt(remTotal)}</h2>
+      <p class="small muted" style="margin-top:-4px">Entram a partir da fatura seguinte. Desmarque o que não quiser lançar.</p>${rows}` : ""}
+    ${dlgBtns("Importar")}`,
     f => {
-      let n = 0, total = 0;
-      items.forEach((it, idx) => {
+      if (!f.k.value) { alert("Escolha qual fatura é esta."); return false; }
+      k = +f.k.value;
+      let nHist = 0, nFut = 0, skipped = 0;
+      // 1) datas do cartão
+      if (f.dates && f.dates.checked) {
+        for (const h of meta.history.slice().sort((a, b) => a.k - b.k)) setInvoiceDates(h.k, +h.open.slice(8), +h.close.slice(8), dueDay);
+        const oc = +openH.close.slice(8);
+        setSchedule(openH.k + 1, oc % 31 + 1, oc, dueDay);
+      }
+      // 2) dados do banco
+      if (f.bank && f.bank.checked) {
+        S.bank = S.bank || { inv: {} };
+        for (const h of meta.history) S.bank.inv[h.k] = { total: h.total, paid: h.paid != null ? h.paid : (S.bank.inv[h.k] || {}).paid ?? null, partial: h.kind === "open", asOf: meta.close || today() };
+        if (meta.limit) S.bank.limit = { ...meta.limit, asOf: meta.close || today() };
+        if (meta.future) S.bank.future = { total: meta.future, asOf: meta.close || today() };
+      }
+      // 3) histórico: compras da fatura, fixadas nela
+      if (f.hist && f.hist.checked) {
+        const done = new Set(), existing = S.tx.filter(x => baseInv(x) === k);
+        for (const r of hist) {
+          let t;
+          if (r.n && r.cents > 0) {
+            const g = groups.find(g => g.card === r.card && g.date === r.date && norm(g.desc) === norm(r.desc) && g.n === r.n && g.is.includes(r.i));
+            if (!g || done.has(g)) continue; done.add(g);
+            t = { amount: g.now, parcels: 1, pOff: g.i - 1, pTotal: g.n };
+          } else t = { amount: r.cents, parcels: 1 };
+          Object.assign(t, { id: uid(), date: r.date, desc: r.desc, cat: suggestCat(r.desc) || "outros", inv: k, card: r.card || undefined });
+          // repetida = já existia antes desta importação, mesma data, valor e loja
+          if (existing.some(x => x.amount === t.amount && x.date === t.date && norm(x.desc) === norm(t.desc))) { skipped++; continue; }
+          S.tx.push(t); nHist++;
+        }
+      }
+      // 4) parcelas futuras
+      fut.forEach((g, idx) => {
         const cb = f["on" + idx]; if (!cb || !cb.checked) return;
-        const rem = it.n - it.i;
-        const t = { id: uid(), date: openDate(k + 1), amount: it.cents * rem, cat: f["c" + idx].value, desc: it.desc, parcels: rem, pOff: it.i, pTotal: it.n };
-        S.tx.push(t); learn(t); n++; total += t.amount;
+        const rem = g.n - g.i;
+        const t = { id: uid(), date: g.date || openDate(k + 1), amount: g.cents * rem, cat: f["c" + idx].value, desc: g.desc, parcels: rem, pOff: g.i, pTotal: g.n, inv: k + 1, card: g.card || undefined };
+        S.tx.push(t); learn(t); nFut++;
       });
-      save(); render();
-      toast(n ? `${n} parcelamento${n > 1 ? "s" : ""} lançado${n > 1 ? "s" : ""} · ${fmt(total)} nas próximas faturas` : "Nada foi lançado");
-    });
-}
-$("#photoIn").onchange = async e => {
-  const file = e.target.files[0]; if (!file) return;
-  const st = $("#ocrStatus"), btn = $("#pickPhoto"), say = m => { if (st) st.textContent = m; };
-  if (btn) btn.disabled = true;
-  try {
-    const text = await ocr(file, say);
-    $("#dlg").close(); showParsed(text);
-  } catch (err) {
-    say(err && err.message === "load" ? "Sem internet para carregar o leitor. Tente de novo conectado." : "Não consegui ler esta imagem. Tente outra ou cole o texto.");
-    if (btn) btn.disabled = false;
-  }
-};
-function showParsed(text) {
-  const p = parsePurchase(text);
-  if (!p.cents) {
-    const f = dialog(`<h3>Não encontrei o valor</h3>
-      <p class="small muted">Confira o texto lido abaixo, corrija se precisar e toque em Ler texto.</p>
-      <textarea class="in" name="t" rows="6">${esc(text.trim())}</textarea>
-      <button class="btn" value="ok">Ler texto</button><button class="btn sec" value="cancel" formnovalidate>Cancelar</button>`,
-      f => { setTimeout(() => showParsed(f.t.value), 0); });
-    return;
-  }
-  const date = p.date || today(), cat = suggestCat(p.desc);
-  const dup = S.tx.find(t => t.amount === p.cents && t.date === date);
-  dialog(`<h3>Compra encontrada</h3>
-    <div class="amount" style="font-size:36px">${fmt(p.cents)}</div>
-    <label class="f"><span>Loja / descrição</span><input class="in" name="d" maxlength="60" value="${esc(p.desc)}"></label>
-    <div class="row"><label class="f" style="flex:1"><span>Data</span><input class="in" type="date" name="dt" value="${date}" required></label>
-    <label class="f" style="flex:1"><span>Parcelas</span><select class="in" name="p">${Array.from({ length: 24 }, (_, i) => `<option value="${i + 1}" ${p.parcels === i + 1 ? "selected" : ""}>${i ? (i + 1) + "x" : "À vista"}</option>`).join("")}</select></label></div>
-    <label class="f"><span>Categoria${cat ? " (sugerida)" : ""}</span><select class="in" name="c" required>${cat ? "" : `<option value="" selected disabled>Escolha…</option>`}${S.categories.map(c => `<option value="${esc(c.id)}" ${c.id === cat ? "selected" : ""}>${esc(c.emoji + " " + c.name)}</option>`).join("")}</select></label>
-    ${dup ? `<div class="banner" style="color:var(--warn);background:var(--bg)">⚠️ Já existe um lançamento de ${fmt(dup.amount)} em ${br(dup.date)}${dup.desc ? " (" + esc(dup.desc) + ")" : ""}. Confira para não lançar duas vezes.</div>` : ""}
-    ${dlgBtns()}`,
-    f => {
-      if (!f.c.value) { alert("Escolha a categoria."); return false; }
-      if (!f.dt.value) return false;
-      addTx({ id: uid(), date: f.dt.value, amount: p.cents, cat: f.c.value, desc: f.d.value.trim(), parcels: +f.p.value });
-      renderAdd();
+      save(); viewK = null; render();
+      toast([nHist && `${nHist} compras no histórico`, nFut && `${nFut} parcelamentos futuros`, skipped && `${skipped} repetidas ignoradas`].filter(Boolean).join(" · ") || "Dados do banco atualizados");
     });
 }
 
@@ -777,9 +916,20 @@ function renderInv() {
     const c = catById(id);
     return `<div class="catline"><div class="row spread"><span>${esc(c.emoji)} ${esc(c.name)}</span><span><b>${fmt(v)}</b>${c.goal ? ` <span class="small muted">/ ${fmt(c.goal)}</span>` : ` <span class="small muted">${tot ? Math.round(v / tot * 100) : 0}%</span>`}</span></div>${c.goal ? barHtml(v, c.goal) : `<div class="bar"><i style="width:${tot ? v / tot * 100 : 0}%;background:var(--accent)"></i></div>`}</div>`;
   }).join("") : `<div class="empty">Nada por aqui ainda</div>`;
+  // por cartão (titular e adicionais), quando a fatura tem mais de um
+  const byCard = {};
+  for (const e of es) { const c = e.t.card || "—"; byCard[c] = (byCard[c] || 0) + e.amt; }
+  const cardRows = Object.entries(byCard).sort((a, b) => b[1] - a[1]);
+  $("#cardsH").hidden = $("#invCards").hidden = cardRows.length < 2;
+  $("#invCards").innerHTML = cardRows.map(([c, v]) => `<div class="catline"><div class="row spread"><span>💳 ${c === "—" ? "Sem cartão informado" : "Final " + esc(c)}</span><span><b>${fmt(v)}</b> <span class="small muted">${tot ? Math.round(v / tot * 100) : 0}%</span></span></div><div class="bar"><i style="width:${tot ? Math.max(0, v / tot * 100) : 0}%;background:var(--c-closed)"></i></div></div>`).join("");
+  const bk = bankOf(k);
+  if (bk && !bk.partial && !es.length) { // só temos o total do banco (histórico)
+    $("#invTotal").textContent = fmt(bk.total);
+    $("#invGoal").textContent = "Valor informado pelo banco (sem compras no app)" + (bk.paid != null ? " · " + payInfo(k, bk.total) : "");
+  } else if (bk && !bk.partial) $("#invGoal").textContent += ` · Banco: ${fmt(bk.total)}${bk.paid != null ? " · " + payInfo(k, bk.total) : ""}`;
   $("#invList").innerHTML = es.length ? es.map(e => {
     const c = catById(e.t.cat);
-    return `<div class="tx" data-id="${esc(e.t.id)}"><div class="e">${esc(c.emoji)}</div><div class="d"><div>${esc(e.t.desc || c.name)}</div><div class="small muted">${br(e.t.date)}${e.n > 1 || e.t.pOff ? ` · parcela ${e.i + 1 + (e.t.pOff || 0)}/${e.t.pTotal || e.n}` : ""}${e.t.desc ? " · " + esc(c.name) : ""}</div></div><div class="v">${fmt(e.amt)}</div></div>`;
+    return `<div class="tx" data-id="${esc(e.t.id)}"><div class="e">${esc(c.emoji)}</div><div class="d"><div>${esc(e.t.desc || c.name)}</div><div class="small muted">${br(e.t.date)}${e.n > 1 || e.t.pTotal ? ` · parcela ${e.i + 1 + (e.t.pOff || 0)}/${e.t.pTotal || e.n}` : ""}${e.t.card ? " · final " + esc(e.t.card) : ""}${e.t.desc ? " · " + esc(c.name) : ""}</div></div><div class="v">${fmt(e.amt)}</div></div>`;
   }).join("") : `<div class="empty">Nenhum lançamento nesta fatura</div>`;
 }
 $("#prevInv").onclick = () => { viewK--; renderInv(); };
@@ -824,7 +974,8 @@ function editTx(id) {
     <div class="row"><label class="f" style="flex:1"><span>Data</span><input class="in" type="date" name="dt" value="${t.date}" required></label>
     <label class="f" style="flex:1"><span>Parcelas</span><select class="in" name="p">${Array.from({ length: 24 }, (_, i) => `<option value="${i + 1}" ${(t.parcels || 1) === i + 1 ? "selected" : ""}>${i ? (i + 1) + "x" : "À vista"}</option>`).join("")}</select></label></div>
     ${dlgBtns()}<button class="btn danger" value="del" formnovalidate>Excluir</button>`,
-    f => { const a = parseMoney(f.a.value); if (!a || !f.dt.value) { alert("Informe valor e data."); return false; }
+    f => { const a = parseMoney(f.a.value.replace("-", "")) * (/^\s*-/.test(f.a.value) ? -1 : 1); if (!a || !f.dt.value) { alert("Informe valor e data."); return false; }
+      if (f.dt.value !== t.date) delete t.inv; // mudou a data: volta a seguir o ciclo pela data
       Object.assign(t, { amount: a, cat: f.c.value, desc: f.d.value.trim(), date: f.dt.value, parcels: +f.p.value }); learn(t); save(); render(); });
   f._extra = v => { if (v === "del") { const i = S.tx.indexOf(t); S.tx.splice(i, 1); save(); render();
     toast("Lançamento excluído", () => { S.tx.splice(i, 0, t); save(); render(); }); } };
@@ -900,10 +1051,56 @@ $("#importFile").onchange = async e => {
   } catch (_) { alert("Arquivo de backup inválido."); }
   e.target.value = "";
 };
+// limpar lançamentos por dia, mês, fatura ou tudo
 $("#wipeBtn").onclick = () => {
-  if (!confirm("Apagar TODOS os lançamentos, metas e ajustes? Isso não pode ser desfeito.")) return;
-  S = defaults(); save(); viewK = null; render(); toast("Dados apagados");
+  const { first, last } = invRange(), invs = [];
+  for (let k = last; k >= first; k--) if (S.tx.some(t => baseInv(t) === k)) invs.push(k);
+  const f = dialog(`<h3>Limpar lançamentos</h3>
+    <label class="f"><span>O que limpar?</span><select class="in" name="m">
+      <option value="day">Um dia (pela data da compra)</option>
+      <option value="month">Um mês inteiro (pela data da compra)</option>
+      <option value="inv">Uma fatura</option>
+      <option value="all">Todos os lançamentos</option>
+      <option value="everything">Tudo: lançamentos, metas, categorias, ajustes e dados do banco</option>
+    </select></label>
+    <label class="f" data-m="day"><span>Dia</span><input class="in" type="date" name="d" value="${today()}"></label>
+    <label class="f" data-m="month" hidden><span>Mês</span><input class="in" type="month" name="mo" value="${today().slice(0, 7)}"></label>
+    <label class="f" data-m="inv" hidden><span>Fatura (lançamentos que começam nela)</span><select class="in" name="k">${invs.map(k => `<option value="${k}">${invLabel(k)}</option>`).join("") || `<option value="">Nenhuma fatura com lançamentos</option>`}</select></label>
+    <div class="banner" id="clrInfo"></div>
+    <p class="small muted">Compras parceladas são apagadas inteiras (todas as parcelas).</p>
+    <button class="btn danger" value="ok">Limpar</button><button class="btn sec" value="cancel" formnovalidate>Cancelar</button>`,
+    f => {
+      const m = f.m.value, pick = clearPick(f);
+      if (m === "everything") {
+        if (!confirm("Apagar TUDO e voltar o app ao início? Lançamentos, metas, categorias, ajustes e dados do banco serão apagados.")) return false;
+        const old = JSON.stringify(S); S = defaults(); save(); viewK = null; render(); show("set");
+        toast("Tudo apagado", () => { S = migrate(JSON.parse(old)); save(); viewK = null; show("add"); });
+        return;
+      }
+      if (!pick.length) { alert("Nada para limpar nessa seleção."); return false; }
+      if (!confirm(`Apagar ${pick.length} lançamento${pick.length > 1 ? "s" : ""} (${fmt(pick.reduce((s, t) => s + t.amount, 0))})?`)) return false;
+      const before = S.tx.slice();
+      S.tx = S.tx.filter(t => !pick.includes(t)); save(); viewK = null; render();
+      toast(`${pick.length} lançamento${pick.length > 1 ? "s" : ""} apagado${pick.length > 1 ? "s" : ""}`, () => { S.tx = before; save(); render(); });
+    });
+  const upd = () => {
+    const m = f.m.value;
+    f.querySelectorAll("[data-m]").forEach(el => el.hidden = el.dataset.m !== m);
+    const info = $("#clrInfo");
+    if (m === "everything") { info.textContent = "O app volta ao estado inicial."; return; }
+    const pick = clearPick(f);
+    info.textContent = pick.length ? `${pick.length} lançamento${pick.length > 1 ? "s" : ""} · ${fmt(pick.reduce((s, t) => s + t.amount, 0))}` : "Nenhum lançamento nessa seleção.";
+  };
+  f.addEventListener("input", upd); f.addEventListener("change", upd); upd();
 };
+function clearPick(f) {
+  const m = f.m.value;
+  if (m === "day") return S.tx.filter(t => t.date === f.d.value);
+  if (m === "month") return S.tx.filter(t => f.mo.value && t.date.slice(0, 7) === f.mo.value);
+  if (m === "inv") return f.k.value === "" ? [] : S.tx.filter(t => baseInv(t) === +f.k.value);
+  if (m === "all") return S.tx.slice();
+  return [];
+}
 
 /* ---------- RESUMO ---------- */
 let sumSel = null;
@@ -917,13 +1114,35 @@ function niceMax(v) {
 function invRange() {
   const cur = invoiceOf(today());
   let first = cur, last = cur;
-  for (const t of S.tx) { const b = invoiceOf(t.date); first = Math.min(first, b); last = Math.max(last, b + (t.parcels || 1) - 1); }
+  for (const t of S.tx) { const b = baseInv(t); first = Math.min(first, b); last = Math.max(last, b + (t.parcels || 1) - 1); }
+  for (const k of Object.keys((S.bank || {}).inv || {})) first = Math.min(first, +k);
   return { cur, first, last };
+}
+// fatura fechada com total do banco usa o valor oficial; as demais usam o que foi lançado no app
+function bankOf(k) { return ((S.bank || {}).inv || {})[k] || null; }
+function invTotal(k, status) {
+  const b = bankOf(k);
+  return b && !b.partial && status === "Fechada" ? b.total : sum(entries(k));
+}
+function payInfo(k, total) {
+  const b = bankOf(k);
+  if (!b || b.paid == null) return "";
+  return b.paid >= total - 100 ? `paga (${fmt(b.paid)}) ✓` : `paga parcialmente: ${fmt(b.paid)} de ${fmt(total)}`;
 }
 function renderSum() {
   const { cur, first, last } = invRange();
   const all = [];
-  for (let k = first; k <= last; k++) all.push({ k, total: sum(entries(k)), status: invStatus(k) });
+  for (let k = first; k <= last; k++) { const status = invStatus(k); all.push({ k, total: invTotal(k, status), status }); }
+  const lim = (S.bank || {}).limit, bf = (S.bank || {}).future;
+  const lt = $("#tLimit");
+  lt.hidden = !lim;
+  if (lim) {
+    const p = lim.used / lim.total;
+    lt.innerHTML = `<div class="row spread"><span class="small muted">Limite do cartão</span><span class="small muted">em ${br(lim.asOf)}</span></div>
+      <b>${fmt(lim.avail)} disponível</b>
+      <div class="bar ${p >= .9 ? "bad" : p >= .7 ? "warn" : ""}"><i style="width:${Math.min(100, p * 100).toFixed(1)}%;${p < .7 ? "background:var(--c-closed)" : ""}"></i></div>
+      <div class="small muted" style="margin-top:4px">Usado ${fmt(lim.used)} de ${fmt(lim.total)} (${Math.round(p * 100)}%)</div>`;
+  }
   const closed = all.filter(x => x.status === "Fechada" && x.total > 0);
   const openI = all.find(x => x.status === "Aberta") || all.find(x => x.k === cur);
   const future = all.filter(x => x.status === "Futura" && x.total > 0);
@@ -933,11 +1152,11 @@ function renderSum() {
   $("#tOpen").textContent = fmt(openI ? openI.total : 0);
   $("#tOpenSub").textContent = openI ? `${invLabel(openI.k)} · fecha ${br(closeDate(openI.k))}` : "";
   $("#tLast").textContent = lastClosed ? fmt(lastClosed.total) : "—";
-  $("#tLastSub").textContent = lastClosed ? `${invLabel(lastClosed.k)} · vence ${br(dueDate(lastClosed.k))}` : "Nenhuma ainda";
+  $("#tLastSub").textContent = lastClosed ? `${invLabel(lastClosed.k)} · ${payInfo(lastClosed.k, lastClosed.total) || "vence " + br(dueDate(lastClosed.k))}` : "Nenhuma ainda";
   $("#tClosed").textContent = fmt(closed.reduce((s, x) => s + x.total, 0));
   $("#tClosedSub").textContent = closed.length ? `${closed.length} fatura${closed.length > 1 ? "s" : ""}` : "Nenhuma ainda";
   $("#tFuture").textContent = fmt(future.reduce((s, x) => s + x.total, 0));
-  $("#tFutureSub").textContent = future.length ? `${future.length} fatura${future.length > 1 ? "s" : ""} já comprometida${future.length > 1 ? "s" : ""}` : "Nada parcelado";
+  $("#tFutureSub").textContent = (future.length ? `${future.length} fatura${future.length > 1 ? "s" : ""} já comprometida${future.length > 1 ? "s" : ""}` : "Nada parcelado") + (bf ? ` · banco: ${fmt(bf.total)}` : "");
   const recent = closed.slice(-6);
   $("#chAvg").textContent = recent.length ? `média ${fmt(Math.round(recent.reduce((s, x) => s + x.total, 0) / recent.length))}` : "";
   $("#lgGoal").style.display = g ? "" : "none";
@@ -950,7 +1169,7 @@ function renderSum() {
   $("#sumList").innerHTML = list.map(x => `<div class="tx" data-k="${x.k}" style="cursor:pointer">
     <div class="e"><span class="lg-dot ${x.status === "Fechada" ? "closed" : x.status === "Aberta" ? "open" : "future"}" style="margin:0"></span></div>
     <div class="d"><div>${invLabel(x.k)} <span class="badge ${x.status === "Aberta" ? "" : x.status === "Fechada" ? "closed" : "future"}">${x.status}</span></div>
-    <div class="small muted">${br(openDate(x.k))} a ${br(closeDate(x.k))} · vence ${br(dueDate(x.k))}${g && x.total > g ? " · acima da meta" : ""}</div></div>
+    <div class="small muted">${br(openDate(x.k))} a ${br(closeDate(x.k))} · vence ${br(dueDate(x.k))}${payInfo(x.k, x.total) ? " · " + payInfo(x.k, x.total) : ""}${g && x.total > g ? " · acima da meta" : ""}</div></div>
     <div class="v">${fmt(x.total)}</div></div>`).join("");
 }
 function drawChart(bars, goal) {
@@ -983,7 +1202,7 @@ function drawChart(bars, goal) {
   const b = bars.find(x => x.k === sumSel);
   $("#chSel").innerHTML = b ? `<span class="lg-dot ${b.status === "Fechada" ? "closed" : b.status === "Aberta" ? "open" : "future"}"></span>
     <div class="grow"><div><b>${invLabel(b.k)}</b> · ${b.status}</div>
-    <div class="small muted">${fmt(b.total)}${goal ? ` · ${Math.round(b.total / goal * 100)}% da meta` : ""} · vence ${br(dueDate(b.k))}</div></div>
+    <div class="small muted">${fmt(b.total)}${goal ? ` · ${Math.round(b.total / goal * 100)}% da meta` : ""} · ${payInfo(b.k, b.total) || "vence " + br(dueDate(b.k))}</div></div>
     <button data-go="${b.k}">Ver fatura ›</button>` : "";
 }
 $("#chart").onclick = e => { const k = e.target.dataset && e.target.dataset.k; if (k) { sumSel = +k; renderSum(); } };
