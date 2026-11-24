@@ -105,7 +105,11 @@ label.f span{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
 .banner{background:var(--accent-soft);color:var(--accent);border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:12px}
 /* modal */
 dialog{border:0;border-radius:18px;background:var(--card);color:var(--text);width:min(92vw,440px);padding:18px}
-dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+dialog{max-height:88vh;overflow-y:auto}
+.imp{border-bottom:1px solid var(--line);padding:10px 0}
+.imp input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent-strong);flex:none}
+.imp select{margin-top:6px;padding:6px 10px;font-size:14px}
 dialog h3{margin:0 0 12px}
 /* toast */
 #toast{position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:calc(env(safe-area-inset-bottom) + 76px);background:var(--toast);color:var(--text);box-shadow:0 6px 24px rgba(0,0,0,.5);padding:10px 14px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;display:flex;gap:12px;align-items:center;max-width:92vw;z-index:20}
@@ -132,6 +136,7 @@ dialog h3{margin:0 0 12px}
     <div class="cats" id="cats"></div>
     <div class="hint">Digite o valor e toque na categoria para salvar.</div>
     <input type="file" id="photoIn" accept="image/*" hidden>
+    <input type="file" id="invIn" accept="application/pdf,.pdf,image/*" multiple hidden>
   </section>
 
   <!-- FATURA -->
@@ -223,7 +228,7 @@ dialog h3{margin:0 0 12px}
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <button class="btn danger" id="wipeBtn">Apagar todos os dados</button>
     </div>
-    <p class="small muted" style="text-align:center">Meu Cartão · v5</p>
+    <p class="small muted" style="text-align:center">Meu Cartão · v6</p>
   </section>
 </main>
 
@@ -538,10 +543,165 @@ $("#chScan").onclick = () => {
     <button type="button" class="btn" id="pickPhoto">📷 Escolher foto ou print</button>
     <div id="ocrStatus" class="small" style="text-align:center;margin:8px 0;color:var(--accent);min-height:18px"></div>
     <label class="f"><span>ou cole aqui o texto da notificação</span><textarea class="in" name="t" rows="3" placeholder="Compra no cartão final 1234, de R$ 67,81, em 23/11/26..."></textarea></label>
-    <button class="btn sec" value="ok">Ler texto</button><button class="btn sec" value="cancel" formnovalidate>Cancelar</button>`,
+    <button class="btn sec" value="ok">Ler texto</button>
+    <div style="border-top:1px solid var(--line);margin:14px 0 4px"></div>
+    <button type="button" class="btn sec" id="openImport">📄 Importar fatura fechada (parcelas)</button>
+    <button class="btn sec" value="cancel" formnovalidate>Cancelar</button>`,
     f => { const txt = f.t.value.trim(); if (!txt) return false; setTimeout(() => showParsed(txt), 0); });
   $("#pickPhoto").onclick = () => { $("#photoIn").value = ""; $("#photoIn").click(); };
+  $("#openImport").onclick = () => { $("#dlg").close(); importInvoiceDialog(); };
 };
+
+/* ---------- IMPORTAR FATURA FECHADA (parcelas que faltam) ---------- */
+const PDF_BASE = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+let pdfReady;
+function loadPdfJs() {
+  return pdfReady = pdfReady || new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = PDF_BASE + "pdf.min.js";
+    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_BASE + "pdf.worker.min.js"; res(window.pdfjsLib); };
+    s.onerror = () => { pdfReady = null; rej(new Error("load")); };
+    document.head.appendChild(s);
+  });
+}
+async function ocrCanvases(canvases, onStatus) {
+  const T = await loadTesseract();
+  let n = 0;
+  const w = await T.createWorker("por", 1, {
+    logger: m => { if (m.status === "recognizing text") onStatus(`Lendo imagem ${n} de ${canvases.length}… ${Math.round(m.progress * 100)}%`); else if (/load|init/.test(m.status)) onStatus("Preparando (só demora na primeira vez)…"); }
+  });
+  try { let out = ""; for (const c of canvases) { n++; out += (await w.recognize(c)).data.text + "\n"; } return out; }
+  finally { w.terminate(); }
+}
+// extrai as linhas de texto de um PDF; se for escaneado (sem texto), usa OCR nas páginas
+async function pdfToLines(file, onStatus) {
+  onStatus("Abrindo o PDF…");
+  const lib = await loadPdfJs(), data = new Uint8Array(await file.arrayBuffer());
+  let doc, password;
+  for (;;) {
+    try { doc = await lib.getDocument({ data: data.slice(), password }).promise; break; }
+    catch (e) {
+      if (!e || e.name !== "PasswordException") throw e;
+      password = prompt(e.code === 2 ? "Senha incorreta. Digite a senha do PDF:" : "Este PDF tem senha (muitos bancos usam os primeiros dígitos do CPF). Digite a senha:");
+      if (password == null) throw new Error("cancel");
+    }
+  }
+  const lines = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    onStatus(`Lendo página ${p} de ${doc.numPages}…`);
+    const items = (await (await doc.getPage(p)).getTextContent()).items
+      .filter(it => it.str.trim()).map(it => ({ x: it.transform[4], y: it.transform[5], s: it.str }))
+      .sort((a, b) => b.y - a.y || a.x - b.x);
+    let row = [], rowY = null;
+    const flush = () => { if (row.length) lines.push(row.sort((a, b) => a.x - b.x).map(i => i.s).join(" ")); row = []; };
+    for (const it of items) { if (rowY === null || Math.abs(it.y - rowY) > 3) { flush(); rowY = it.y; } row.push(it); }
+    flush();
+  }
+  if (lines.join("").length >= 80) return lines;
+  const canvases = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    onStatus(`Preparando página ${p} de ${doc.numPages}…`);
+    const page = await doc.getPage(p), vp = page.getViewport({ scale: 2.5 }), c = document.createElement("canvas");
+    c.width = vp.width; c.height = vp.height;
+    await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+    canvases.push(c);
+  }
+  return (await ocrCanvases(canvases, onStatus)).split("\n");
+}
+// encontra compras parceladas: "23/09 LOJA XYZ 03/10 120,00", "LOJA - Parcela 3/10 R$ 120,00", "LOJA PARC 03 DE 10 120,00"
+const MON = "jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez";
+function parseInstallments(lines) {
+  const out = [], seen = new Set();
+  const splitter = new RegExp(`(?=\\b\\d{1,2}\\/\\d{1,2}\\s+[A-Za-zÀ-ú*])|(?=\\b\\d{1,2}\\s(?:${MON})\\b)`, "i");
+  const dateRe = new RegExp(`^(?:\\d{1,2}\\/\\d{1,2}(?:\\/\\d{2,4})?|\\d{1,2}\\s(?:${MON})[a-z]*\\.?)\\s+`, "i");
+  for (const raw of lines) {
+    for (let s of String(raw).replace(/\s+/g, " ").split(splitter)) {
+      s = s.trim();
+      const dm = s.match(dateRe), body = dm ? s.slice(dm[0].length) : s;
+      const vals = [...body.matchAll(/(-\s?)?(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})(?!\d)/g)];
+      if (!vals.length) continue;
+      const lv = vals[vals.length - 1];
+      if (lv[1]) continue; // estorno / crédito
+      const cents = parseMoney(lv[2]); if (!cents) continue;
+      const before = body.slice(0, lv.index);
+      let pm = before.match(/parc(?:ela)?\.?\s*(\d{1,2})\s*(?:\/|de)\s*(\d{1,2})/i);
+      if (!pm) { const all = [...before.matchAll(/(?:^|\s)(\d{1,2})\s?\/\s?(\d{1,2})(?=\s|$)/g)]; pm = all.length ? all[all.length - 1] : null; }
+      if (!pm) continue;
+      const i = +pm[1], n = +pm[2];
+      if (!(n >= 2 && n <= 48 && i >= 1 && i <= n)) continue;
+      const desc = before.slice(0, pm.index).replace(/\bparc(?:ela)?\.?\s*$/i, "").replace(/[\s\-–·|]+$/, "").trim();
+      if (!desc || !/[a-z]/i.test(desc)) continue;
+      const key = norm(desc) + "|" + i + "|" + n + "|" + cents;
+      if (seen.has(key)) continue;
+      seen.add(key); out.push({ desc: desc.slice(0, 60), i, n, cents });
+    }
+  }
+  return out;
+}
+function importInvoiceDialog() {
+  const cur = invoiceOf(today()), opts = [];
+  for (let k = cur - 1; k >= cur - 6; k--) opts.push(k);
+  dialog(`<h3>Importar fatura fechada</h3>
+    <p class="small muted" style="margin-top:-6px">Envie o PDF da fatura (ou prints das páginas). O app encontra as compras parceladas e lança as parcelas que ainda faltam nas próximas faturas. Tudo é lido no próprio celular.</p>
+    <label class="f"><span>Qual fatura é esta?</span><select class="in" name="k">${opts.map(k => `<option value="${k}">${invLabel(k)} (fechou em ${br(closeDate(k))})</option>`).join("")}</select></label>
+    <button type="button" class="btn" id="pickInv">📄 Escolher PDF ou prints</button>
+    <div id="ocrStatus" class="small" style="text-align:center;margin:8px 0;color:var(--accent);min-height:18px"></div>
+    <button class="btn sec" value="cancel" formnovalidate>Cancelar</button>`);
+  $("#pickInv").onclick = () => { $("#invIn").value = ""; $("#invIn").click(); };
+}
+$("#invIn").onchange = async e => {
+  const files = [...e.target.files]; if (!files.length) return;
+  const f = $("#dlgForm"), k = +f.k.value, st = $("#ocrStatus"), btn = $("#pickInv"), say = m => { if (st) st.textContent = m; };
+  if (btn) btn.disabled = true;
+  try {
+    let lines = [];
+    const imgs = files.filter(x => !/pdf/i.test(x.type) && !/\.pdf$/i.test(x.name));
+    for (const x of files) if (!imgs.includes(x)) lines = lines.concat(await pdfToLines(x, say));
+    if (imgs.length) {
+      say("Preparando imagens…");
+      const canv = []; for (const x of imgs) canv.push(await prepImage(x));
+      lines = lines.concat((await ocrCanvases(canv, say)).split("\n"));
+    }
+    $("#dlg").close();
+    showInstallments(parseInstallments(lines), k);
+  } catch (err) {
+    say(err && err.message === "cancel" ? "Importação cancelada." : err && err.message === "load" ? "Sem internet para carregar o leitor. Tente de novo conectado." : "Não consegui ler este arquivo. Tente o PDF original do banco ou prints nítidos.");
+    if (btn) btn.disabled = false;
+  }
+};
+function showInstallments(items, k) {
+  if (!items.length) {
+    dialog(`<h3>Nenhuma parcela encontrada</h3>
+      <p class="small muted">Não achei compras parceladas nesta fatura (no formato "LOJA 03/10 120,00"). Se você enviou prints, tente imagens mais nítidas ou o PDF original do banco. Também dá para lançar manualmente usando o botão Parcelas.</p>
+      <button class="btn" value="cancel">OK</button>`);
+    return;
+  }
+  const rows = items.map((it, idx) => {
+    const rem = it.n - it.i;
+    const dup = S.tx.find(t => (t.pTotal || t.parcels) === it.n && Math.abs(Math.round(t.amount / (t.parcels || 1)) - it.cents) <= 2);
+    const cat = suggestCat(it.desc) || "outros";
+    return `<div class="imp">
+      <label class="row"><input type="checkbox" name="on${idx}" ${rem > 0 && !dup ? "checked" : ""} ${rem > 0 ? "" : "disabled"}><b style="flex:1;min-width:0">${esc(it.desc)}</b></label>
+      <div class="small muted">Parcela ${it.i}/${it.n} de ${fmt(it.cents)} · ${rem > 0 ? `faltam ${rem} (${fmt(it.cents * rem)})` : "era a última parcela"}${dup ? ` · <span style="color:var(--warn)">parece já lançado</span>` : ""}</div>
+      ${rem > 0 ? `<select class="in" name="c${idx}">${S.categories.map(c => `<option value="${esc(c.id)}" ${c.id === cat ? "selected" : ""}>${esc(c.emoji + " " + c.name)}</option>`).join("")}</select>` : ""}
+    </div>`;
+  }).join("");
+  const remTotal = items.reduce((s, it) => s + it.cents * (it.n - it.i), 0);
+  dialog(`<h3>Parcelas encontradas</h3>
+    <p class="small muted" style="margin-top:-6px">${items.length} compra${items.length > 1 ? "s" : ""} parcelada${items.length > 1 ? "s" : ""} na fatura ${invLabel(k)}. Restam ${fmt(remTotal)}, que entram a partir da fatura ${invLabel(k + 1)}. Desmarque o que não quiser lançar.</p>
+    ${rows}${dlgBtns("Lançar parcelas")}`,
+    f => {
+      let n = 0, total = 0;
+      items.forEach((it, idx) => {
+        const cb = f["on" + idx]; if (!cb || !cb.checked) return;
+        const rem = it.n - it.i;
+        const t = { id: uid(), date: openDate(k + 1), amount: it.cents * rem, cat: f["c" + idx].value, desc: it.desc, parcels: rem, pOff: it.i, pTotal: it.n };
+        S.tx.push(t); learn(t); n++; total += t.amount;
+      });
+      save(); render();
+      toast(n ? `${n} parcelamento${n > 1 ? "s" : ""} lançado${n > 1 ? "s" : ""} · ${fmt(total)} nas próximas faturas` : "Nada foi lançado");
+    });
+}
 $("#photoIn").onchange = async e => {
   const file = e.target.files[0]; if (!file) return;
   const st = $("#ocrStatus"), btn = $("#pickPhoto"), say = m => { if (st) st.textContent = m; };
@@ -619,7 +779,7 @@ function renderInv() {
   }).join("") : `<div class="empty">Nada por aqui ainda</div>`;
   $("#invList").innerHTML = es.length ? es.map(e => {
     const c = catById(e.t.cat);
-    return `<div class="tx" data-id="${esc(e.t.id)}"><div class="e">${esc(c.emoji)}</div><div class="d"><div>${esc(e.t.desc || c.name)}</div><div class="small muted">${br(e.t.date)}${e.n > 1 ? ` · parcela ${e.i + 1}/${e.n}` : ""}${e.t.desc ? " · " + esc(c.name) : ""}</div></div><div class="v">${fmt(e.amt)}</div></div>`;
+    return `<div class="tx" data-id="${esc(e.t.id)}"><div class="e">${esc(c.emoji)}</div><div class="d"><div>${esc(e.t.desc || c.name)}</div><div class="small muted">${br(e.t.date)}${e.n > 1 || e.t.pOff ? ` · parcela ${e.i + 1 + (e.t.pOff || 0)}/${e.t.pTotal || e.n}` : ""}${e.t.desc ? " · " + esc(c.name) : ""}</div></div><div class="v">${fmt(e.amt)}</div></div>`;
   }).join("") : `<div class="empty">Nenhum lançamento nesta fatura</div>`;
 }
 $("#prevInv").onclick = () => { viewK--; renderInv(); };

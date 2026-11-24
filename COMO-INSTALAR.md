@@ -27,6 +27,7 @@ O app é um "web app" (PWA): você hospeda os arquivos uma vez, grátis, e adici
 - **Lançar** (tela inicial): digite o valor no teclado e toque na categoria. Pronto, salvo.
   Antes de tocar na categoria, você pode adicionar descrição, parcelas (o valor digitado é o total) ou outra data.
 - **📷 Ler compra**: escolha o print da notificação do banco (ou uma foto do comprovante). O app lê o valor, a data, a loja e as parcelas e sugere a categoria. Você confere e toca em Salvar. Também dá para colar o texto da notificação.
+  **Importar fatura fechada**: dentro de "Ler compra", envie o PDF da fatura (ou prints das páginas) e escolha de qual mês ela é. O app encontra as compras parceladas (ex.: "MAGAZINE LUIZA 05/10 189,90") e lança as parcelas que faltam nas próximas faturas. Você revisa a lista antes; se a fatura já foi importada, ele avisa. PDFs com senha pedem a senha do banco.
   A leitura é feita no próprio iPhone. Na primeira vez ele baixa o leitor (alguns MB), então é preciso internet. O app aprende a categoria de cada loja que você salva.
 - **Fatura**: total, quanto falta para a meta, datas de abertura/fechamento/vencimento, gastos por categoria e lista de compras. Use ‹ › para navegar entre faturas. Toque numa compra para editar ou excluir.
   Para mudar as datas, use **Ajustar datas da fatura**: dá para alterar abertura, fechamento e vencimento. As novas datas ficam salvas e valem para esta fatura e as próximas; as faturas anteriores não mudam.
