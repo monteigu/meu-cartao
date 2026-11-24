@@ -263,7 +263,7 @@ dialog h3{margin:0 0 12px}
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <button class="btn danger" id="wipeBtn">🧹 Limpar lançamentos…</button>
     </div>
-    <p class="small muted" style="text-align:center">Meu Cartão · v10</p>
+    <p class="small muted" style="text-align:center">Meu Cartão · v11</p>
   </section>
 </main>
 
@@ -1193,17 +1193,16 @@ $("#wipeBtn").onclick = () => {
     <button class="btn danger" value="ok">Limpar</button><button class="btn sec" value="cancel" formnovalidate>Cancelar</button>`,
     f => {
       const m = f.m.value, pick = clearPick(f);
-      if (m === "everything") {
-        if (!confirm("Apagar TUDO e voltar o app ao início? Lançamentos, metas, categorias, ajustes e dados do banco serão apagados.")) return false;
-        const old = JSON.stringify(S); S = defaults(); save(); viewK = null; render(); show("set");
-        toast("Tudo apagado", () => { S = migrate(JSON.parse(old)); save(); viewK = null; show("add"); });
-        return;
-      }
-      if (!pick.length) { alert("Nada para limpar nessa seleção."); return false; }
-      if (!confirm(`Apagar ${pick.length} lançamento${pick.length > 1 ? "s" : ""} (${fmt(pick.reduce((s, t) => s + t.amount, 0))})?`)) return false;
-      const before = S.tx.slice();
-      S.tx = S.tx.filter(t => !pick.includes(t)); save(); viewK = null; render();
-      toast(`${pick.length} lançamento${pick.length > 1 ? "s" : ""} apagado${pick.length > 1 ? "s" : ""}`, () => { S.tx = before; save(); render(); });
+      // sem janela de confirmação do navegador (alguns ambientes bloqueiam): apaga, avisa e oferece Desfazer
+      const old = JSON.stringify(S);
+      const undo = () => { S = migrate(JSON.parse(old)); save(); viewK = null; show("add"); toast("Dados restaurados"); };
+      if (m === "everything") S = defaults();
+      else S.tx = S.tx.filter(t => !pick.includes(t));
+      save(); viewK = null; sumSel = null;
+      $("#q").value = ""; $("#qClear").hidden = true;
+      show("add");
+      const n = pick.length;
+      toast(m === "everything" ? "Dados apagados" : `Dados apagados${n ? ` · ${n} lançamento${n > 1 ? "s" : ""}` : " · nada nessa seleção"}`, n || m === "everything" ? undo : null);
     });
   const upd = () => {
     const m = f.m.value;
