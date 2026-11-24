@@ -32,6 +32,7 @@ O app é um "web app" (PWA): você hospeda os arquivos uma vez, grátis, e adici
   - **Atualizar as datas do cartão**: abertura, fechamento e vencimento tirados da própria fatura.
   - **Guardar dados do banco**: totais e pagamentos das faturas anteriores, limite do cartão e total de parcelas futuras, que aparecem na aba Resumo.
   - **Parcelas que faltam**: lançadas automaticamente nas próximas faturas.
+  No topo dá para escolher **Fatura completa** ou **Só parcelas futuras** (lança apenas as parcelas que faltam, sem mexer na fatura importada, nas datas do cartão nem nos dados do banco). O app lembra a última escolha.
   Se a fatura já foi importada, ele avisa e desmarca tudo. PDFs com senha pedem a senha do banco.
   A leitura é feita no próprio iPhone. Na primeira vez ele baixa o leitor (alguns MB), então é preciso internet. O app aprende a categoria de cada loja que você salva.
 - **Fatura**: total, quanto falta para a meta, datas de abertura/fechamento/vencimento, gastos por categoria e lista de compras. Use ‹ › para navegar entre faturas. Toque numa compra para editar ou excluir. O campo **Buscar** procura em todas as faturas por loja, valor (ex.: 100,35), categoria, final do cartão, data ou parcelas (ex.: 12x); toque no resultado para corrigir.

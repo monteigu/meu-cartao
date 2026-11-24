@@ -82,6 +82,7 @@ nav button.on{color:var(--accent)}
 .badge.future{background:transparent;color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
 .seg{display:flex;background:var(--bg);border-radius:10px;padding:2px}
 .seg button{font-size:12px;padding:5px 10px;border-radius:8px;color:var(--muted)}
+.seg.wide button{flex:1;font-size:14px;padding:8px 6px}
 .seg button.on{background:var(--key-press);color:var(--text);font-weight:600}
 .crow{padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer}
 .crow:last-child{border-bottom:0}
@@ -263,7 +264,7 @@ dialog h3{margin:0 0 12px}
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <button class="btn danger" id="wipeBtn">🧹 Limpar lançamentos…</button>
     </div>
-    <p class="small muted" style="text-align:center">Meu Cartão · v11</p>
+    <p class="small muted" style="text-align:center">Meu Cartão · v12</p>
   </section>
 </main>
 
@@ -851,17 +852,21 @@ function showInvoiceImport(meta) {
   }).join("");
   const openH = meta.history.find(h => h.kind === "open");
   const dueDay = meta.due ? +meta.due.slice(8) : null;
-  dialog(`<h3>Importar fatura</h3>
+  let impMode = S.settings.importMode === "parc" ? "parc" : "all";
+  const dlgF = dialog(`<h3>Importar fatura</h3>
     <label class="f"><span>Fatura</span><select class="in" name="k">${k == null ? `<option value="" selected disabled>Escolha qual fatura é esta…</option>` : ""}${kOpts.map(x => `<option value="${x}" ${x === k ? "selected" : ""}>${invLabel(x)}${x === k ? " (lida do PDF)" : ""}</option>`).join("")}</select></label>
+    <label class="f"><span>O que importar?</span></label>
+    <div class="seg wide" id="impMode"><button type="button" data-m="all">Fatura completa</button><button type="button" data-m="parc">Só parcelas futuras</button></div>
+    <div class="small muted" id="impHint" style="margin:6px 0 12px"></div>
     ${meta.total != null ? `<div class="banner" style="${ok ? "" : "color:var(--warn);background:var(--bg)"}">${ok ? "✓" : "⚠️"} Total da fatura ${fmt(meta.total)}${meta.due ? " · vence " + br(meta.due) : ""}. ${ok ? "As compras lidas somam exatamente esse valor." : `As compras lidas somam ${fmt(meta.sum)}. Confira antes de importar.`}</div>` : ""}
 
-    ${hist.length ? `<div class="imp"><label class="row"><input type="checkbox" name="hist" ${inK ? "" : "checked"}><b style="flex:1">Compras desta fatura (histórico)</b></label>
+    ${hist.length ? `<div class="imp" data-x><label class="row"><input type="checkbox" name="hist" ${inK ? "" : "checked"}><b style="flex:1">Compras desta fatura (histórico)</b></label>
       <div class="small muted">${hist.length} lançamentos (${fmt(meta.sum)})${cards.length > 1 ? ` de ${cards.length} cartões (finais ${cards.join(", ")})` : ""}, incluindo estornos e a parcela cobrada neste mês. A categoria é sugerida pela loja.${inK ? ` <span style="color:var(--warn)">Você já tem ${inK} lançamento${inK > 1 ? "s" : ""} nesta fatura; importar pode duplicar.</span>` : ""}</div></div>` : ""}
 
-    ${hasDates ? `<div class="imp"><label class="row"><input type="checkbox" name="dates" checked><b style="flex:1">Atualizar as datas do cartão</b></label>
+    ${hasDates ? `<div class="imp" data-x><label class="row"><input type="checkbox" name="dates" checked><b style="flex:1">Atualizar as datas do cartão</b></label>
       <div class="small muted">Esta fatura: ${br(meta.open)} a ${br(meta.close)}, vence ${br(meta.due)}. Fatura aberta: ${br(openH.open)} a ${br(openH.close)}. Próximas: fecha dia ${+openH.close.slice(8)}, vence dia ${dueDay}.</div></div>` : ""}
 
-    ${meta.history.length || meta.limit ? `<div class="imp"><label class="row"><input type="checkbox" name="bank" checked><b style="flex:1">Guardar dados do banco</b></label>
+    ${meta.history.length || meta.limit ? `<div class="imp" data-x><label class="row"><input type="checkbox" name="bank" checked><b style="flex:1">Guardar dados do banco</b></label>
       <div class="small muted">${meta.history.filter(h => h.kind !== "open").length} faturas com total e pagamento${meta.limit ? `, limite ${fmt(meta.limit.total)} (disponível ${fmt(meta.limit.avail)})` : ""}${meta.future ? `, parcelas futuras segundo o banco: ${fmt(meta.future)}` : ""}. Aparecem na aba Resumo.</div></div>` : ""}
 
     ${fut.length ? `<h2 style="margin-top:16px">Parcelas que faltam · ${fmt(remTotal)}</h2>
@@ -870,22 +875,25 @@ function showInvoiceImport(meta) {
     f => {
       if (!f.k.value) { alert("Escolha qual fatura é esta."); return false; }
       k = +f.k.value;
+      const onlyParc = impMode === "parc";
+      S.settings.importMode = impMode; // lembra a escolha para a próxima importação
+      if (onlyParc && !fut.some((g, idx) => f["on" + idx] && f["on" + idx].checked)) { alert("Nenhuma parcela futura marcada para importar."); return false; }
       let nHist = 0, nFut = 0, skipped = 0;
       // 1) datas do cartão
-      if (f.dates && f.dates.checked) {
+      if (!onlyParc && f.dates && f.dates.checked) {
         for (const h of meta.history.slice().sort((a, b) => a.k - b.k)) setInvoiceDates(h.k, +h.open.slice(8), +h.close.slice(8), dueDay);
         const oc = +openH.close.slice(8);
         setSchedule(openH.k + 1, oc % 31 + 1, oc, dueDay);
       }
       // 2) dados do banco
-      if (f.bank && f.bank.checked) {
+      if (!onlyParc && f.bank && f.bank.checked) {
         S.bank = S.bank || { inv: {} };
         for (const h of meta.history) S.bank.inv[h.k] = { total: h.total, paid: h.paid != null ? h.paid : (S.bank.inv[h.k] || {}).paid ?? null, partial: h.kind === "open", asOf: meta.close || today() };
         if (meta.limit) S.bank.limit = { ...meta.limit, asOf: meta.close || today() };
         if (meta.future) S.bank.future = { total: meta.future, asOf: meta.close || today() };
       }
       // 3) histórico: compras da fatura, fixadas nela
-      if (f.hist && f.hist.checked) {
+      if (!onlyParc && f.hist && f.hist.checked) {
         const done = new Set(), existing = S.tx.filter(x => baseInv(x) === k);
         for (const r of hist) {
           let t;
@@ -910,6 +918,19 @@ function showInvoiceImport(meta) {
       save(); viewK = null; render();
       toast([nHist && `${nHist} compras no histórico`, nFut && `${nFut} parcelamentos futuros`, skipped && `${skipped} repetidas ignoradas`].filter(Boolean).join(" · ") || "Dados do banco atualizados");
     });
+  // modo: fatura completa ou só as parcelas dos próximos meses (não mexe na fatura importada, nas datas nem nos dados do banco)
+  const setMode = m => {
+    impMode = m;
+    dlgF.querySelectorAll("#impMode button").forEach(b => b.classList.toggle("on", b.dataset.m === m));
+    dlgF.querySelectorAll("[data-x]").forEach(el => el.hidden = m === "parc");
+    const kk = dlgF.k.value === "" ? null : +dlgF.k.value;
+    $("#impHint").textContent = m === "parc"
+      ? (kk == null ? "Lança só as parcelas que ainda faltam, a partir da fatura seguinte." : `Lança só as parcelas que ainda faltam, a partir de ${invLabel(kk + 1)}. A fatura de ${invLabel(kk)}, as datas do cartão e os dados do banco não são alterados.`)
+      : "Importa as compras desta fatura, as datas do cartão, os dados do banco e as parcelas futuras.";
+  };
+  dlgF.querySelector("#impMode").onclick = e => { const m = e.target.dataset.m; if (m) setMode(m); };
+  dlgF.k.addEventListener("change", () => setMode(impMode));
+  setMode(impMode);
 }
 
 /* ---------- FATURA ---------- */
