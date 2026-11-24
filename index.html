@@ -217,6 +217,7 @@ dialog h3{margin:0 0 12px}
     <div class="card">
       <label class="f"><span>Meta total por fatura (R$)</span><input class="in" id="goalTotal" inputmode="decimal" placeholder="Ex.: 3000"></label>
       <div id="goalTotalBar"></div>
+      <button class="btn sec" id="suggestBtn" style="margin-top:12px">✨ Sugerir rateio por categoria</button>
     </div>
     <h2>Por categoria</h2>
     <div class="card" id="goalCats"></div>
@@ -252,7 +253,7 @@ dialog h3{margin:0 0 12px}
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <button class="btn danger" id="wipeBtn">🧹 Limpar lançamentos…</button>
     </div>
-    <p class="small muted" style="text-align:center">Meu Cartão · v8</p>
+    <p class="small muted" style="text-align:center">Meu Cartão · v9</p>
   </section>
 </main>
 
@@ -1012,6 +1013,64 @@ function renderGoals() {
     return `<div class="goalrow"><div class="n"><div>${esc(c.emoji)} ${esc(c.name)}</div><div class="small muted">${fmt(v)}${c.goal ? " de " + fmt(c.goal) : " gastos"}</div>${barHtml(v, c.goal)}</div><input class="in" inputmode="decimal" placeholder="R$" data-g="${esc(c.id)}" value="${moneyInput(c.goal)}"></div>`;
   }).join("") + (sumCatGoals ? `<div class="small muted" style="margin-top:8px">Soma das metas por categoria: ${fmt(sumCatGoals)}</div>` : "");
 }
+/* rateio sugerido: divide a meta total entre as categorias, pela média de gastos das últimas faturas */
+const DEFAULT_WEIGHTS = { mercado: 25, restaurante: 10, delivery: 6, transporte: 8, combustivel: 10, saude: 6, casa: 10, lazer: 7, compras: 8, assinaturas: 4, viagem: 3, outros: 3 };
+function suggestSplit(goal) {
+  const { first } = invRange(), cur = invoiceOf(today()), ks = [];
+  for (let k = cur - 1; k >= first && ks.length < 6; k--) if (invStatus(k) === "Fechada" && entries(k).length) ks.push(k);
+  const hist = {};
+  ks.forEach(k => { for (const [id, v] of Object.entries(catTotals(k))) hist[id] = (hist[id] || 0) + v; });
+  for (const id in hist) hist[id] = Math.max(0, Math.round(hist[id] / ks.length));
+  const histTotal = Object.values(hist).reduce((s, v) => s + v, 0);
+  const useHist = histTotal > 0;
+  const w = {};
+  for (const c of S.categories) w[c.id] = useHist ? (hist[c.id] || 0) : (DEFAULT_WEIGHTS[c.id] || 0);
+  const wsum = Object.values(w).reduce((s, v) => s + v, 0) || 1;
+  // proporcional, arredondado para R$ 10; a diferença do arredondamento vai para a maior categoria
+  const split = {};
+  for (const c of S.categories) split[c.id] = Math.round(goal * w[c.id] / wsum / 1000) * 1000;
+  const diff = goal - Object.values(split).reduce((s, v) => s + v, 0);
+  const top = Object.keys(split).sort((a, b) => w[b] - w[a])[0];
+  if (top) split[top] = Math.max(0, split[top] + diff);
+  return { split, hist, histTotal, months: ks.length, useHist };
+}
+$("#suggestBtn").onclick = () => {
+  const goal = S.settings.goal;
+  if (!goal) { alert("Primeiro defina a meta total por fatura."); $("#goalTotal").focus(); return; }
+  const { split, hist, histTotal, months, useHist } = suggestSplit(goal);
+  const diffPct = useHist ? Math.round((goal - histTotal) / histTotal * 100) : 0;
+  const cats = S.categories.slice().sort((a, b) => (split[b.id] - split[a.id]) || ((hist[b.id] || 0) - (hist[a.id] || 0)));
+  const f = dialog(`<h3 tabindex="-1" autofocus style="outline:none">Rateio sugerido</h3>
+    <p class="small muted" style="margin-top:-6px">${useHist
+      ? `Baseado na média das últimas ${months} fatura${months > 1 ? "s" : ""} (${fmt(histTotal)} por fatura). Sua meta de ${fmt(goal)} é ${diffPct === 0 ? "igual à média" : `${Math.abs(diffPct)}% ${diffPct < 0 ? "menor" : "maior"} que a média`}, então cada categoria foi ${diffPct < 0 ? "reduzida" : diffPct > 0 ? "aumentada" : "mantida"} na mesma proporção.`
+      : "Ainda não há faturas fechadas com gastos no app, então usei uma divisão típica de orçamento."} Ajuste os valores como quiser antes de salvar.</p>
+    <div id="splitRows">${cats.map(c => `<div class="goalrow"><div class="n"><div>${esc(c.emoji)} ${esc(c.name)}</div>
+      <div class="small muted">${useHist ? `média ${fmt(hist[c.id] || 0)}` : ""}${c.goal ? `${useHist ? " · " : ""}atual ${fmt(c.goal)}` : ""}</div></div>
+      <input class="in" inputmode="decimal" name="s_${esc(c.id)}" value="${moneyInput(split[c.id])}" placeholder="R$ 0"></div>`).join("")}</div>
+    <div class="banner" id="splitSum" style="margin-top:10px"></div>
+    <button class="btn" value="ok">Salvar metas por categoria</button>
+    <button type="button" class="btn sec" id="splitFix">Ajustar diferença na maior categoria</button>
+    <button class="btn sec" value="cancel" formnovalidate>Cancelar</button>`,
+    f => {
+      for (const c of S.categories) c.goal = parseMoney(f["s_" + c.id].value);
+      save(); renderGoals();
+      const tot = S.categories.reduce((s, c) => s + c.goal, 0);
+      toast(`Metas salvas · ${fmt(tot)} de ${fmt(goal)}`);
+    });
+  const total = () => S.categories.reduce((s, c) => s + parseMoney(f["s_" + c.id].value), 0);
+  const upd = () => {
+    const t = total(), d = goal - t, el = $("#splitSum");
+    el.style.color = Math.abs(d) < 100 ? "" : "var(--warn)";
+    el.textContent = Math.abs(d) < 100 ? `✓ Soma ${fmt(t)}: igual à meta total` : d > 0 ? `Soma ${fmt(t)} · faltam ${fmt(d)} para chegar na meta de ${fmt(goal)}` : `Soma ${fmt(t)} · passou ${fmt(-d)} da meta de ${fmt(goal)}`;
+    $("#splitFix").hidden = Math.abs(d) < 100;
+  };
+  $("#splitFix").onclick = () => {
+    const d = goal - total(); if (!d) return;
+    const big = S.categories.map(c => [c.id, parseMoney(f["s_" + c.id].value)]).sort((a, b) => b[1] - a[1])[0];
+    f["s_" + big[0]].value = moneyInput(Math.max(0, big[1] + d)); upd();
+  };
+  f.addEventListener("input", upd); upd();
+};
 $("#goalTotal").onchange = e => { S.settings.goal = parseMoney(e.target.value); save(); renderGoals(); toast("Meta salva"); };
 $("#goalCats").addEventListener("change", e => {
   const id = e.target.dataset.g; if (!id) return;

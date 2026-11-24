@@ -37,7 +37,7 @@ O app é um "web app" (PWA): você hospeda os arquivos uma vez, grátis, e adici
 - **Fatura**: total, quanto falta para a meta, datas de abertura/fechamento/vencimento, gastos por categoria e lista de compras. Use ‹ › para navegar entre faturas. Toque numa compra para editar ou excluir.
   Para mudar as datas, use **Ajustar datas da fatura**: dá para alterar abertura, fechamento e vencimento. As novas datas ficam salvas e valem para esta fatura e as próximas; as faturas anteriores não mudam.
 - **Resumo**: totais da fatura em aberto, da última fechada, de todas as fechadas e das próximas (parcelas já comprometidas), mais um gráfico de barras por fatura com a linha da meta. Toque numa barra para ver os detalhes, ou numa fatura da lista para abri-la. Em **Gastos por categoria**, veja quanto foi em cada categoria na fatura escolhida (comparado à média das anteriores) ou a média dos últimos 6 meses; toque numa categoria para ver as lojas.
-- **Metas**: meta total por fatura e meta por categoria. O app avisa quando você passa de uma meta.
+- **Metas**: meta total por fatura e meta por categoria. O app avisa quando você passa de uma meta. O botão **✨ Sugerir rateio por categoria** divide a meta total entre as categorias pela sua média de gastos (ou por uma divisão típica, se ainda não houver histórico); você ajusta os valores e salva.
 - **Ajustes**: dias do cartão, categorias (criar/remover), **backup** e **🧹 Limpar lançamentos**: apague um dia, um mês inteiro, uma fatura, todos os lançamentos ou tudo (voltar o app ao início). Logo após limpar aparece o botão Desfazer.
 
 ## 4. Sobre o atalho (app Atalhos / Siri)

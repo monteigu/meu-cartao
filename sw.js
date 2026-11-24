@@ -1,5 +1,5 @@
 // Faz o app abrir mesmo sem internet. Ao alterar o index.html, aumente a versão abaixo.
-const CACHE = "meucartao-v8";
+const CACHE = "meucartao-v9";
 const FILES = ["./", "index.html", "manifest.json", "icon-180.png", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
