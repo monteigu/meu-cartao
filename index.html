@@ -179,6 +179,8 @@ dialog h3{margin:0 0 12px}
         <div><span class="small muted">Vence</span><b id="dDue"></b></div>
       </div>
       <div class="small muted" id="invCountdown" style="text-align:center;margin-top:8px"></div>
+      <button class="btn" id="reconBtn" hidden>🔎 Conferir com a fatura do banco</button>
+      <input type="file" id="reconIn" accept="application/pdf,.pdf,image/*" multiple hidden>
       <button class="btn sec" id="adjClose" style="font-size:14px;padding:8px">Ajustar datas da fatura</button>
     </div>
     <h2>Por categoria</h2>
@@ -264,7 +266,7 @@ dialog h3{margin:0 0 12px}
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <button class="btn danger" id="wipeBtn">🧹 Limpar lançamentos…</button>
     </div>
-    <p class="small muted" style="text-align:center">Meu Cartão · v12</p>
+    <p class="small muted" style="text-align:center">Meu Cartão · v13</p>
   </section>
 </main>
 
@@ -781,6 +783,18 @@ function parseInstallments(lines) {
   }
   return out;
 }
+// lê PDFs e/ou prints de uma fatura e interpreta
+async function readInvoiceFiles(files, say) {
+  let lines = [], first = [];
+  const imgs = files.filter(x => !/pdf/i.test(x.type) && !/\.pdf$/i.test(x.name));
+  for (const x of files) if (!imgs.includes(x)) { const r = await readPdf(x, say); lines = lines.concat(r.lines); if (!first.length) first = r.first; }
+  if (imgs.length) {
+    say("Preparando imagens…");
+    const canv = []; for (const x of imgs) canv.push(await prepImage(x));
+    lines = lines.concat((await ocrCanvases(canv, say)).split("\n"));
+  }
+  return { meta: parseInvoice(lines, first), lines };
+}
 function importInvoiceDialog() {
   dialog(`<h3>Importar fatura fechada</h3>
     <p class="small muted" style="margin-top:-6px">Envie o PDF da fatura (ou prints das páginas). O app lê as compras, as parcelas que faltam, as datas do cartão, o histórico de pagamentos e o limite. Você revisa tudo antes. A leitura é feita no próprio celular.</p>
@@ -794,16 +808,8 @@ $("#invIn").onchange = async e => {
   const st = $("#ocrStatus"), btn = $("#pickInv"), say = m => { if (st) st.textContent = m; };
   if (btn) btn.disabled = true;
   try {
-    let lines = [], first = [];
-    const imgs = files.filter(x => !/pdf/i.test(x.type) && !/\.pdf$/i.test(x.name));
-    for (const x of files) if (!imgs.includes(x)) { const r = await readPdf(x, say); lines = lines.concat(r.lines); if (!first.length) first = r.first; }
-    if (imgs.length) {
-      say("Preparando imagens…");
-      const canv = []; for (const x of imgs) canv.push(await prepImage(x));
-      lines = lines.concat((await ocrCanvases(canv, say)).split("\n"));
-    }
+    const { meta, lines } = await readInvoiceFiles(files, say);
     $("#dlg").close();
-    const meta = parseInvoice(lines, first);
     if (!meta.rows.length) { // formato desconhecido: só as parcelas, pelo leitor genérico
       meta.groups = parseInstallments(lines).map(it => ({ ...it, now: it.cents, date: null, card: null }));
     }
@@ -933,6 +939,142 @@ function showInvoiceImport(meta) {
   setMode(impMode);
 }
 
+/* ---------- CONFERIR FATURA FECHADA COM O BANCO ---------- */
+const descSim = (a, b) => {
+  const A = norm(a), B = norm(b); if (!A || !B) return 0;
+  if (A.includes(B) || B.includes(A)) return 1;
+  const tb = new Set(B.split(" ").filter(w => w.length >= 3));
+  return A.split(" ").filter(w => w.length >= 3).some(w => tb.has(w)) ? .6 : 0;
+};
+// compara as linhas do banco com os lançamentos do app na fatura k
+function reconcile(k, meta) {
+  const bank = [], used = new Set();
+  for (const r of meta.rows) {
+    if (r.payment) continue;
+    if (r.n && r.cents > 0) {
+      const g = meta.groups.find(g => g.card === r.card && g.date === r.date && norm(g.desc) === norm(r.desc) && g.n === r.n && g.is.includes(r.i));
+      if (!g || used.has(g)) continue; used.add(g);
+      bank.push({ date: g.date, desc: g.desc, amount: g.now, card: g.card, i: g.i, n: g.n, g });
+    } else bank.push({ date: r.date, desc: r.desc, amount: r.cents, card: r.card });
+  }
+  const app = entries(k).map(e => ({ e, t: e.t, amount: e.amt, date: e.t.date, desc: e.t.desc || catById(e.t.cat).name }));
+  const free = new Set(app), pairs = [];
+  const tol = (b, a) => Math.abs(b.amount - a.amount) <= Math.max(2, a.t.parcels || 1);
+  const dd = (b, a) => Math.abs(daysBetween(b.date, a.date));
+  const pass = cond => {
+    for (const b of bank) {
+      if (b.m) continue;
+      let best = null, bs = -1e9;
+      for (const a of free) { if (!cond(b, a)) continue; const s = descSim(b.desc, a.desc) * 10 - dd(b, a); if (s > bs) { bs = s; best = a; } }
+      if (best) { b.m = best; free.delete(best); pairs.push({ b, a: best }); }
+    }
+  };
+  pass((b, a) => tol(b, a) && dd(b, a) <= 5);                    // mesmo valor, data próxima
+  pass((b, a) => tol(b, a) && dd(b, a) <= 45);                   // mesmo valor, data digitada diferente
+  pass((b, a) => !tol(b, a) && descSim(b.desc, a.desc) > 0 && dd(b, a) <= 5 && Math.sign(a.amount) === Math.sign(b.amount)); // mesma compra, valor diferente
+  return {
+    bank, app, pairs,
+    missing: bank.filter(b => !b.m),
+    extra: [...free],
+    valDiff: pairs.filter(p => !tol(p.b, p.a)),
+    dateDiff: pairs.filter(p => tol(p.b, p.a) && dd(p.b, p.a) > 5),
+    bankTotal: bank.reduce((s, b) => s + b.amount, 0),
+    appTotal: app.reduce((s, a) => s + a.amount, 0)
+  };
+}
+$("#reconBtn").onclick = () => {
+  const k = viewK;
+  dialog(`<h3>Conferir ${invLabel(k)}</h3>
+    <p class="small muted" style="margin-top:-6px">Envie o PDF (ou prints) desta fatura do banco. O app compara com o que você lançou durante o mês e mostra o que faltou, o que sobrou e o que está diferente. Nada é alterado sem você escolher.</p>
+    <button type="button" class="btn" id="pickRecon">📄 Escolher PDF ou prints da fatura</button>
+    <div id="ocrStatus" class="small" style="text-align:center;margin:8px 0;color:var(--accent);min-height:18px"></div>
+    <button class="btn sec" value="cancel" formnovalidate>Cancelar</button>`);
+  $("#pickRecon").onclick = () => { $("#reconIn").value = ""; $("#reconIn").click(); };
+};
+$("#reconIn").onchange = async e => {
+  const files = [...e.target.files]; if (!files.length) return;
+  const st = $("#ocrStatus"), btn = $("#pickRecon"), say = m => { if (st) st.textContent = m; };
+  if (btn) btn.disabled = true;
+  try {
+    const { meta } = await readInvoiceFiles(files, say);
+    if (!meta.rows.length) { say("Não encontrei as compras nesta fatura. Tente o PDF original do banco."); if (btn) btn.disabled = false; return; }
+    let k = viewK, note = "";
+    if (meta.k != null && meta.k !== k) { note = `Este arquivo é da fatura de ${invLabel(meta.k)}, então comparei com ela.`; k = meta.k; viewK = k; }
+    $("#dlg").close();
+    showRecon(k, reconcile(k, meta), meta, note);
+  } catch (err) {
+    say(err && err.message === "cancel" ? "Cancelado." : err && err.message === "load" ? "Sem internet para carregar o leitor. Tente de novo conectado." : "Não consegui ler este arquivo.");
+    if (btn) btn.disabled = false;
+  }
+};
+function showRecon(k, R, meta, note) {
+  const nDiv = R.missing.length + R.extra.length + R.valDiff.length + R.dateDiff.length;
+  const diff = R.bankTotal - R.appTotal;
+  const catSel = (name, id) => `<select class="in" name="${name}">${S.categories.map(c => `<option value="${esc(c.id)}" ${c.id === id ? "selected" : ""}>${esc(c.emoji + " " + c.name)}</option>`).join("")}</select>`;
+  const head = `${note ? `<div class="banner" style="color:var(--warn);background:var(--bg)">${esc(note)}</div>` : ""}
+    <div class="tiles" style="margin:8px 0">
+      <div class="tile" style="background:var(--bg)"><div class="small muted">Banco</div><b>${fmt(R.bankTotal)}</b><div class="small muted">${R.bank.length} lançamentos</div></div>
+      <div class="tile" style="background:var(--bg)"><div class="small muted">No app</div><b>${fmt(R.appTotal)}</b><div class="small muted">${R.app.length} lançamentos</div></div>
+    </div>`;
+  if (!nDiv) {
+    dialog(`<h3>Conferência de ${invLabel(k)}</h3>${head}
+      <div class="banner">✓ Tudo certo! Os ${R.pairs.length} lançamentos do app batem com a fatura do banco.</div>
+      <button class="btn" value="cancel">OK</button>`);
+    return;
+  }
+  const line = (x, extra = "") => `<div class="small muted">${br(x.date)}${x.card ? " · final " + esc(x.card) : ""}${x.n ? ` · parcela ${x.i}/${x.n}` : ""}${extra}</div>`;
+  let html = `<h3>Conferência de ${invLabel(k)}</h3>${head}
+    <div class="banner" style="color:var(--warn);background:var(--bg)">⚠️ ${nDiv} divergência${nDiv > 1 ? "s" : ""} · diferença de ${fmt(Math.abs(diff))} ${diff > 0 ? "a mais no banco" : diff < 0 ? "a mais no app" : ""}. Escolha o que corrigir.</div>`;
+  if (R.missing.length) html += `<h2>Faltou lançar no app · ${R.missing.length}</h2>` + R.missing.map((b, i) => {
+    const rem = b.n ? b.n - b.i : 0;
+    const futDup = rem > 0 && S.tx.some(t => (t.pTotal || t.parcels) === b.n && Math.abs(Math.round(t.amount / (t.parcels || 1)) - b.g.cents) <= 2 && baseInv(t) > k);
+    return `<div class="imp"><label class="row"><input type="checkbox" name="m${i}" checked><b style="flex:1;min-width:0">${esc(b.desc)}</b><span class="val">${fmt(b.amount)}</span></label>
+      ${line(b, rem > 0 && !futDup ? ` · inclui as ${rem} parcelas seguintes (${fmt(b.g.cents * rem)})` : rem > 0 ? " · parcelas seguintes já lançadas" : "")}
+      ${catSel("mc" + i, suggestCat(b.desc) || "outros")}</div>`;
+  }).join("");
+  if (R.extra.length) html += `<h2>Está no app, mas não no banco · ${R.extra.length}</h2>` + R.extra.map((a, i) => `<div class="imp">
+      <div class="row"><b style="flex:1;min-width:0">${esc(a.desc)}</b><span class="val">${fmt(a.amount)}</span></div>
+      ${line(a, " · " + esc(catById(a.t.cat).name))}
+      <select class="in" name="x${i}"><option value="keep">Manter como está</option><option value="next">Mover para a próxima fatura (o banco ainda não cobrou)</option><option value="del">Excluir (lançado por engano)</option></select></div>`).join("");
+  if (R.valDiff.length) html += `<h2>Valor diferente · ${R.valDiff.length}</h2>` + R.valDiff.map((p, i) => `<div class="imp">
+      <label class="row"><input type="checkbox" name="v${i}" checked><b style="flex:1;min-width:0">${esc(p.a.desc)}</b></label>
+      <div class="small muted">${br(p.a.date)} · no app ${fmt(p.a.amount)} → no banco <b style="color:var(--text)">${fmt(p.b.amount)}</b> (${esc(p.b.desc)})</div></div>`).join("");
+  if (R.dateDiff.length) html += `<h2>Data diferente · ${R.dateDiff.length}</h2>` + R.dateDiff.map((p, i) => `<div class="imp">
+      <label class="row"><input type="checkbox" name="d${i}" checked><b style="flex:1;min-width:0">${esc(p.a.desc)}</b><span class="val">${fmt(p.a.amount)}</span></label>
+      <div class="small muted">no app ${br(p.a.date)} → no banco <b style="color:var(--text)">${br(p.b.date)}</b> (${esc(p.b.desc)})</div></div>`).join("");
+  html += `<button class="btn" value="ok">Aplicar correções marcadas</button><button class="btn sec" value="cancel" formnovalidate>Fechar sem corrigir</button>`;
+  dialog(html, f => {
+    let add = 0, moved = 0, del = 0, fixV = 0, fixD = 0;
+    R.missing.forEach((b, i) => {
+      if (!f["m" + i].checked) return;
+      const cat = f["mc" + i].value;
+      const t = { id: uid(), date: b.date, amount: b.amount, desc: b.desc, cat, inv: k, parcels: 1, card: b.card || undefined };
+      if (b.n) Object.assign(t, { pOff: b.i - 1, pTotal: b.n });
+      S.tx.push(t); learn(t); add++;
+      const rem = b.n ? b.n - b.i : 0;
+      if (rem > 0 && !S.tx.some(x => x !== t && (x.pTotal || x.parcels) === b.n && Math.abs(Math.round(x.amount / (x.parcels || 1)) - b.g.cents) <= 2 && baseInv(x) > k))
+        S.tx.push({ id: uid(), date: b.date, amount: b.g.cents * rem, desc: b.desc, cat, inv: k + 1, parcels: rem, pOff: b.i, pTotal: b.n, card: b.card || undefined });
+    });
+    R.extra.forEach((a, i) => {
+      const v = f["x" + i].value;
+      if (v === "del") { S.tx = S.tx.filter(t => t !== a.t); del++; }
+      if (v === "next") { a.t.inv = baseInv(a.t) + 1; moved++; }
+    });
+    R.valDiff.forEach((p, i) => {
+      if (!f["v" + i].checked) return;
+      const t = p.a.t, n = t.parcels || 1;
+      t.amount = n > 1 ? p.b.amount * n : p.b.amount; fixV++;
+    });
+    R.dateDiff.forEach((p, i) => {
+      if (!f["d" + i].checked) return;
+      const t = p.a.t, kk = baseInv(t); t.date = p.b.date; t.inv = kk; fixD++;
+    });
+    save(); render();
+    const msg = [add && `${add} adicionado${add > 1 ? "s" : ""}`, del && `${del} excluído${del > 1 ? "s" : ""}`, moved && `${moved} movido${moved > 1 ? "s" : ""}`, fixV && `${fixV} valor${fixV > 1 ? "es" : ""} corrigido${fixV > 1 ? "s" : ""}`, fixD && `${fixD} data${fixD > 1 ? "s" : ""} corrigida${fixD > 1 ? "s" : ""}`].filter(Boolean).join(" · ");
+    toast(msg ? `Fatura conferida: ${msg}` : "Nenhuma correção aplicada");
+  });
+}
+
 /* ---------- FATURA ---------- */
 function invStatus(k) {
   const t = today();
@@ -946,6 +1088,7 @@ function renderInv() {
   $("#invTitle").textContent = `${S.settings.cardName} · ${invLabel(k)}`;
   const status = invStatus(k);
   const b = $("#invBadge"); b.textContent = status; b.classList.toggle("closed", status !== "Aberta");
+  $("#reconBtn").hidden = status !== "Fechada"; // conferência só depois que a fatura fecha
   $("#invTotal").textContent = fmt(tot);
   const g = S.settings.goal;
   $("#invGoal").textContent = g ? `Meta ${fmt(g)} · ${tot <= g ? "restam " + fmt(g - tot) : "passou " + fmt(tot - g)}` : "Sem meta total definida";
